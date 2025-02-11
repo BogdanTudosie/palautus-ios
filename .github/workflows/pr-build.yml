@@ -64,7 +64,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run MobSF Analysis
-        uses: MobSF/mobsfscan-action@main
+      - name: Run Security Scan
+        uses: aquasecurity/trivy-action@master
         with:
-          args: '. --json'
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
