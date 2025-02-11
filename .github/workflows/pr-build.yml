@@ -59,27 +59,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Run Security Scan (JSON)
+      - name: Run Filesystem Scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           format: 'json'
-          output: 'trivy-results.json'
+          output: 'trivy-fs-results.json'
           exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
-      - name: Run Security Scan (Table)
+      - name: Run Config Scan
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs'
+          scan-type: 'config'
           scan-ref: '.'
-          format: 'table'
-          output: 'trivy-results.txt'
+          format: 'json'
+          output: 'trivy-config-results.json'
           exit-code: '1'
-          ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+
+      - name: Run Secret Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'secret'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-secret-results.json'
+          exit-code: '1'
+
+      - name: Generate Summary Report
+        run: |
+          echo "# Security Scan Summary" > scan-summary.md
+          echo "## Filesystem Vulnerabilities" >> scan-summary.md
+          cat trivy-fs-results.json | jq -r '.Results[] | select(.Vulnerabilities != null) | .Vulnerabilities[] | "* \(.VulnerabilityID): \(.Title)"' >> scan-summary.md || echo "No filesystem vulnerabilities found" >> scan-summary.md
+          echo "## Misconfigurations" >> scan-summary.md
+          cat trivy-config-results.json | jq -r '.Results[] | select(.Misconfigurations != null) | .Misconfigurations[] | "* \(.ID): \(.Title)"' >> scan-summary.md || echo "No misconfigurations found" >> scan-summary.md
+          echo "## Secrets" >> scan-summary.md
+          cat trivy-secret-results.json | jq -r '.Results[] | select(.Secrets != null) | .Secrets[] | "* \(.Title)"' >> scan-summary.md || echo "No secrets found" >> scan-summary.md
 
       - name: Upload Scan Results
         if: always()
@@ -87,6 +105,6 @@ jobs:
         with:
           name: security-scan-results
           path: |
-            trivy-results.json
-            trivy-results.txt
+            trivy-*-results.json
+            scan-summary.md
           retention-days: 30
