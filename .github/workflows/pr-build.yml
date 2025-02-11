@@ -13,19 +13,13 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: macos-latest
-
+    
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install xcpretty
-        run: gem install xcpretty
-
-      - name: Show Build Destinations
-        run: xcodebuild -project palautus.xcodeproj -scheme palautus -showdestinations
-
-      - name: Select Xcode
+      
+      - name: Select Latest Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
-
+      
       - name: Build and Test
         run: |
           xcodebuild clean test \
@@ -35,35 +29,36 @@ jobs:
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             | xcpretty && exit ${PIPESTATUS[0]}
-
+      
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: |
-            build/reports/
-            fastlane/test_output/
-
+            **/Build/Logs/Test/*.xcresult
+            **/derivedData/**/*.xcresult
+          if-no-files-found: warn
+  
   lint:
     name: SwiftLint
     runs-on: ubuntu-latest
-
+    
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: SwiftLint
         uses: norio-nomura/action-swiftlint@3.2.1
         with:
           args: --strict
-
+  
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-
+    
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Run Security Scan (JSON)
         uses: aquasecurity/trivy-action@master
         with:
@@ -75,14 +70,13 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
-      - name: Run Security Scan (HTML)
+      - name: Run Security Scan (Table)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
-          format: 'template'
-          template: '@contrib/html.tpl'
-          output: 'trivy-results.html'
+          format: 'table'
+          output: 'trivy-results.txt'
           exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
@@ -94,5 +88,5 @@ jobs:
           name: security-scan-results
           path: |
             trivy-results.json
-            trivy-results.html
+            trivy-results.txt
           retention-days: 30
