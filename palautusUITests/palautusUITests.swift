@@ -14,8 +14,6 @@ final class PalautusUITests: XCTestCase {
 
         // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-
     }
 
     override func tearDownWithError() throws {
