@@ -195,6 +195,9 @@
 			);
 			mainGroup = 7E09FF222D5A9DB3002C900F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D182F8062D5D333D005BF755 /* XCRemoteSwiftPackageReference "swift-collections" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7E09FF2C2D5A9DB3002C900F /* Products */;
 			projectDirPath = "";
@@ -556,6 +559,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D182F8062D5D333D005BF755 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = 7E09FF232D5A9DB3002C900F /* Project object */;
 }
