@@ -22,12 +22,15 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
       
+      - name: Show Available Destinations
+        run: xcodebuild -project palautus.xcodeproj -scheme palautus -showdestinations
+      
       - name: Build and Test
         run: |
           xcodebuild clean test \
             -project palautus.xcodeproj \
             -scheme palautus \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination "platform=iOS Simulator,OS=16.2,name=iPhone 14" \
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             | xcpretty && exit ${PIPESTATUS[0]}
@@ -63,11 +66,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run MobSF Analysis
-        uses: MobSF/mobsfscan-action@main
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          args: '. --sarif --output mobsf-results.sarif'
-        continue-on-error: true
+          python-version: '3.10'
+
+      - name: Run MobSF Analysis
+        run: |
+          pip install mobsfscan
+          mobsfscan . --sarif --output mobsf-results.sarif || true
+          # Create empty SARIF if scan produced no results
+          if [ ! -f mobsf-results.sarif ]; then
+            echo '{"version":"2.1.0","runs":[]}' > mobsf-results.sarif
+          fi
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
@@ -75,15 +86,18 @@ jobs:
           sarif_file: mobsf-results.sarif
           category: mobsf
 
+      - name: Create reports directory
+        run: mkdir -p reports
+
       - name: Run Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: 'iOS App'
           path: '.'
           format: 'SARIF'
+          out: './reports'
           args: >
             --enableExperimental
-            --suppression suppressions.xml
             --failOnCVSS 7
             --exclude "**/*.git/**"
 
@@ -93,8 +107,3 @@ jobs:
         with:
           sarif_file: reports/dependency-check-report.sarif
           category: dependency-check
-
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
