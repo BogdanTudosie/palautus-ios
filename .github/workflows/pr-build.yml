@@ -68,46 +68,20 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    
+      
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          python-version: '3.10'
-
-      - name: Create reports directory
-        run: mkdir -p reports
-
-      - name: Run Dependency Check with Debug
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: 'iOS App'
-          path: '.'
-          format: 'SARIF'
-          out: './reports'
-          args: >
-            --enableExperimental
-            --failOnCVSS 7
-            --exclude "**/*.git/**"
-            --log debug
-
-      - name: Debug Output
-        if: always()
-        run: |
-          echo "Current directory contents:"
-          ls -la
-          echo "Reports directory contents:"
-          ls -la reports/ || echo "Reports directory is empty or doesn't exist"
-          echo "Environment variables:"
-          env
-          echo "Dependency Check Version:"
-          dependency-check.sh --version || echo "Dependency Check not found"
-
-      - name: Upload Dependency Check SARIF
+          scan-type: 'fs'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+        
+      - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
         with:
-          sarif_file: reports/dependency-check-report.sarif
-          category: dependency-check
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
