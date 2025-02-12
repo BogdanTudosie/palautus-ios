@@ -27,10 +27,16 @@ jobs:
       
       - name: Build and Test
         run: |
+          # List available simulators and select an iPhone
+          SIMULATOR_UDID=$(xcrun simctl list devices available | grep -m 1 "iPhone" | awk -F'[()]' '{print $2}')
+          
+          # Create and boot the simulator if it doesn't exist
+          xcrun simctl boot "${SIMULATOR_UDID}" || true
+          
           xcodebuild clean test \
             -project palautus.xcodeproj \
             -scheme palautus \
-            -destination "platform=iOS Simulator,OS=16.2,name=iPhone 14" \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             | xcpretty && exit ${PIPESTATUS[0]}
