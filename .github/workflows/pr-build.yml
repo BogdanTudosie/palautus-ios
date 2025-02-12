@@ -1,5 +1,4 @@
 name: iOS Pull Request
-
 on:
   pull_request:
     branches: [ main, develop ]
@@ -13,6 +12,9 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: macos-latest
+    permissions:
+      contents: read
+      security-events: write
     
     steps:
       - uses: actions/checkout@v4
@@ -54,11 +56,45 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run MobSF Analysis
         uses: MobSF/mobsfscan-action@main
         with:
-          args: '. --json'
+          args: '. --sarif --output mobsf-results.sarif'
+        continue-on-error: true
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: mobsf-results.sarif
+          category: mobsf
+
+      - name: Run Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'iOS App'
+          path: '.'
+          format: 'SARIF'
+          args: >
+            --enableExperimental
+            --suppression suppressions.xml
+            --failOnCVSS 7
+            --exclude "**/*.git/**"
+
+      - name: Upload Dependency Check SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+          category: dependency-check
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
