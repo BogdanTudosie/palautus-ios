@@ -1,0 +1,96 @@
+name: iOS Pull Request
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - '**.swift'
+      - '**.xcodeproj/**'
+      - '**.plist'
+      - '.github/workflows/**'
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+      
+      - name: Show Available Destinations
+        run: xcodebuild -project palautus.xcodeproj -scheme palautus -showdestinations
+      
+      - name: Build and Test
+        run: |
+          # List available simulators and select an iPhone
+          SIMULATOR_UDID=$(xcrun simctl list devices available | grep -m 1 "iPhone" | awk -F'[()]' '{print $2}')
+          
+          # Create and boot the simulator if it doesn't exist
+          xcrun simctl boot "${SIMULATOR_UDID}" || true
+          
+          xcodebuild clean test \
+            -project palautus.xcodeproj \
+            -scheme palautus \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_REQUIRED=NO \
+            | xcpretty && exit ${PIPESTATUS[0]}
+      
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/reports/
+            fastlane/test_output/
+  
+  lint:
+    name: SwiftLint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: SwiftLint
+        uses: norio-nomura/action-swiftlint@3.2.1
+        with:
+          args: --strict
+  
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          format: 'json'
+          output: 'trivy-report.json'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: true
+
+      - name: Upload Trivy JSON Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-json-report
+          path: trivy-report.json
+
+      - name: Convert Trivy JSON to HTML
+        run: |
+          npm install -g trivy-to-html
+          trivy-to-html -i trivy-report.json -o trivy-report.html
+
+      - name: Upload Trivy HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-html-report
+          path: trivy-report.html
