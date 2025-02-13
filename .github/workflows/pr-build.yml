@@ -1,5 +1,4 @@
 name: iOS Pull Request
-
 on:
   pull_request:
     branches: [ main, develop ]
@@ -13,19 +12,31 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: macos-latest
+    permissions:
+      contents: read
+      security-events: write
     
     steps:
       - uses: actions/checkout@v4
       
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+      
+      - name: Show Available Destinations
+        run: xcodebuild -project palautus.xcodeproj -scheme palautus -showdestinations
       
       - name: Build and Test
         run: |
+          # List available simulators and select an iPhone
+          SIMULATOR_UDID=$(xcrun simctl list devices available | grep -m 1 "iPhone" | awk -F'[()]' '{print $2}')
+          
+          # Create and boot the simulator if it doesn't exist
+          xcrun simctl boot "${SIMULATOR_UDID}" || true
+          
           xcodebuild clean test \
             -project palautus.xcodeproj \
             -scheme palautus \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             | xcpretty && exit ${PIPESTATUS[0]}
@@ -57,8 +68,11 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Run MobSF Analysis
-        uses: MobSF/mobsfscan-action@main
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          args: '. --json'
+          scan-type: 'fs'
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: true
