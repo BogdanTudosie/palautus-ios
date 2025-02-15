@@ -63,6 +63,13 @@ jobs:
               | tee buildlog.txt \
               | xcpretty && exit ${PIPESTATUS[0]}
 
+             # If tests fail, show the full log
+            if [ $? -ne 0 ]; then
+              echo "Tests failed. Full build log:"
+              cat buildlog.txt
+              exit 1
+            fi
+
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
