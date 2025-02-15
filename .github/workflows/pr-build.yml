@@ -24,11 +24,11 @@ jobs:
 
       - name: Download iOS 18.2 Platform
         run: |
-          echo "Current platforms:"
-          xcrun xcodebuild -downloadPlatform -v
-          
-          echo "\nDownloading iOS 18.2 platform..."
+          echo "Downloading iOS platform..."
           xcrun xcodebuild -downloadPlatform iOS
+          
+          echo "Waiting for download to complete..."
+          sleep 30
           
           echo "\nAvailable runtimes after download:"
           xcrun simctl list runtimes
