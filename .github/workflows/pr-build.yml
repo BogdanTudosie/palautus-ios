@@ -61,36 +61,35 @@ jobs:
         uses: norio-nomura/action-swiftlint@3.2.1
         with:
           args: --strict
-  
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-    
+
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          format: 'json'
-          output: 'trivy-report.json'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          ignore-unfixed: true
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        format: 'json'
+        output: 'trivy-report.json'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+        ignore-unfixed: true
 
-      - name: Upload Trivy JSON Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-json-report
-          path: trivy-report.json
+    - name: Upload Trivy JSON Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-json-report
+        path: trivy-report.json
 
-      - name: Convert Trivy JSON to HTML
-        run: |
-          npm install -g trivy-to-html
-          trivy-to-html -i trivy-report.json -o trivy-report.html
+    - name: Convert Trivy JSON to HTML (Native Trivy Method)
+      run: |
+        trivy image --format template --template "@contrib/html.tpl" -i trivy-report.json -o trivy-report.html
 
-      - name: Upload Trivy HTML Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-html-report
-          path: trivy-report.html
+    - name: Upload Trivy HTML Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-html-report
+        path: trivy-report.html
