@@ -84,16 +84,6 @@ jobs:
         name: trivy-json-report
         path: trivy-report.json
 
-    - name: Run Trivy vulnerability scanner (HTML)
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        format: 'template'
-        template: '@/contrib/html.tpl'
-        output: 'trivy-report.html'
-        severity: 'CRITICAL,HIGH,MEDIUM'
-        ignore-unfixed: true
-
     - name: Upload Trivy HTML Report
       uses: actions/upload-artifact@v4
       with:
