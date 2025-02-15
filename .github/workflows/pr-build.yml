@@ -22,20 +22,23 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
-      - name: Update Project Settings
+      - name: Download iOS 18.2 Platform
         run: |
-          echo "Current project settings:"
-          plutil -p palautus.xcodeproj/project.pbxproj
+          echo "Current platforms:"
+          xcrun xcodebuild -downloadPlatform -v
           
-          echo "\nAvailable runtimes:"
+          echo "\nDownloading iOS 18.2 platform..."
+          xcrun xcodebuild -downloadPlatform iOS
+          
+          echo "\nAvailable runtimes after download:"
           xcrun simctl list runtimes
 
       - name: Create and Boot Simulator
         run: |
           SIMULATOR_NAME="iPhone 14"
           
-          # Use iOS 17.0 runtime
-          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-17-0"
+          # Use iOS 18.2 runtime
+          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-2"
           echo "Using runtime: ${RUNTIME_ID}"
           
           SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "${RUNTIME_ID}")
@@ -51,7 +54,6 @@ jobs:
             -scheme palautus \
             -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
             -sdk iphonesimulator \
-            IPHONEOS_DEPLOYMENT_TARGET=17.0 \
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             ONLY_ACTIVE_ARCH=YES \
