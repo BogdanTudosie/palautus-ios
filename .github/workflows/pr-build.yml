@@ -33,7 +33,7 @@ jobs:
       - name: Create and Boot Simulator
         run: |
           SIMULATOR_NAME="iPhone 14 Test Device"
-          SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "iOS 16.4")
+          SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "iOS 18.2")
           echo "Created simulator: ${SIMULATOR_UDID}"
           
           # Boot the simulator
