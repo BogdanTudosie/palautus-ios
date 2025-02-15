@@ -22,30 +22,20 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
-      - name: Show Build Settings
+      - name: Update Project Settings
         run: |
-          echo "Project build settings:"
-          xcodebuild -project palautus.xcodeproj -scheme palautus -showBuildSettings | grep -i "DEPLOYMENT_TARGET"
-          echo "\nAvailable destinations:"
-          xcodebuild -project palautus.xcodeproj -scheme palautus -showdestinations
-
-      - name: Attempt Platform Download
-        run: |
-          echo "Attempting to download iOS 18.2 platform..."
-          xcodebuild -downloadPlatform iOS || true
+          echo "Current project settings:"
+          plutil -p palautus.xcodeproj/project.pbxproj
           
-          echo "\nAvailable runtimes after download attempt:"
+          echo "\nAvailable runtimes:"
           xcrun simctl list runtimes
 
       - name: Create and Boot Simulator
         run: |
           SIMULATOR_NAME="iPhone 14"
           
-          echo "Available runtimes:"
-          xcrun simctl list runtimes
-          
-          # Get the runtime that matches our project requirements
-          RUNTIME_ID=$(xcrun simctl list runtimes | grep "iOS 17" | head -1 | awk '{print $NF}')
+          # Use iOS 17.0 runtime
+          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-17-0"
           echo "Using runtime: ${RUNTIME_ID}"
           
           SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "${RUNTIME_ID}")
@@ -61,6 +51,7 @@ jobs:
             -scheme palautus \
             -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
             -sdk iphonesimulator \
+            IPHONEOS_DEPLOYMENT_TARGET=17.0 \
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             ONLY_ACTIVE_ARCH=YES \
@@ -74,3 +65,51 @@ jobs:
           path: |
             build/reports/
             fastlane/test_output/
+
+  lint:
+    name: SwiftLint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SwiftLint
+        uses: norio-nomura/action-swiftlint@3.2.1
+        with:
+          args: --strict
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner (JSON)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        format: 'json'
+        output: 'trivy-report.json'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+        ignore-unfixed: true
+
+    - name: Upload Trivy JSON Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-json-report
+        path: trivy-report.json
+
+    - name: Download Trivy HTML Template
+      run: |
+        curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
+  
+    - name: Run Trivy vulnerability scanner (HTML)
+      run: |
+        trivy fs --format template --template "html.tpl" --output trivy-report.html --severity CRITICAL,HIGH,MEDIUM .
+  
+    - name: Upload Trivy HTML Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-html-report
+        path: trivy-report.html
