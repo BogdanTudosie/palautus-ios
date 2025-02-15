@@ -25,18 +25,14 @@ jobs:
       - name: Create and Boot Simulator
         run: |
           SIMULATOR_NAME="iPhone 14"
-
+          
           # Use iOS 17.0 runtime specifically
           RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-17-0"
           echo "Using runtime: ${RUNTIME_ID}"
-
-          # Get the first available iOS runtime
-          RUNTIME_ID=$(xcrun simctl list runtimes | grep iOS | head -1 | awk '{print $NF}')
-          echo "Using runtime: ${RUNTIME_ID}"
-
+          
           SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "${RUNTIME_ID}")
           echo "Created simulator: ${SIMULATOR_UDID}"
-
+          
           xcrun simctl boot "${SIMULATOR_UDID}"
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
@@ -46,6 +42,8 @@ jobs:
             -project palautus.xcodeproj \
             -scheme palautus \
             -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+            -sdk iphonesimulator \
+            IPHONEOS_DEPLOYMENT_TARGET=17.0 \
             -enableCodeCoverage YES \
             CODE_SIGNING_REQUIRED=NO \
             ONLY_ACTIVE_ARCH=YES \
