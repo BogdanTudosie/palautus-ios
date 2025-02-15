@@ -38,6 +38,19 @@ jobs:
           # Set environment variable for later use
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
+      - name: Create and Select Simulator
+        run: |
+          # Create a new simulator with iOS 16.2
+          SIMULATOR_NAME="iPhone 14 iOS 16.2"
+          SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "iOS16.2")
+          echo "Created simulator: ${SIMULATOR_UDID}"
+
+          # Boot the simulator
+          xcrun simctl boot "${SIMULATOR_UDID}"
+
+          # Set environment variable for later use
+          echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
+
       - name: Build and Test
         run: |
           xcodebuild clean test \
@@ -53,10 +66,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
-          path: |
-            build/reports/
-            fastlane/test_output/
+            name: test-results
+            path: |
+              build/reports/
+              fastlane/test_output/
 
   lint:
     name: SwiftLint
