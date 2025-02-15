@@ -99,3 +99,17 @@ jobs:
       with:
         name: trivy-html-report
         path: trivy-report.html
+
+    - name: Download Trivy HTML Template
+      run: |
+          curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
+  
+    - name: Run Trivy vulnerability scanner (HTML)
+      run: |
+          trivy fs --format template --template "html.tpl" --output trivy-report.html --severity CRITICAL,HIGH,MEDIUM .
+  
+    - name: Upload Trivy HTML Report
+      uses: actions/upload-artifact@v4
+      with:
+          name: trivy-html-report
+          path: trivy-report.html
