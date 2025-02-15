@@ -22,33 +22,30 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
+      - name: Install iOS Runtime
+        run: |
+          echo "Installing iOS runtime..."
+          xcodebuild -downloadPlatform iOS
+          
+          echo "Verifying installation:"
+          xcrun simctl list runtimes
+
       - name: Create and Boot Simulator
         run: |
-          # Get the oldest available iOS runtime
-          RUNTIME=$(xcrun simctl list runtimes | grep iOS | head -n 1 | sed 's/.*- \(.*\)/\1/')
-          echo "Using runtime: ${RUNTIME}"
-
           SIMULATOR_NAME="iPhone 14 Test Device"
-          SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "${RUNTIME}")
+          SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "iOS 16.4")
           echo "Created simulator: ${SIMULATOR_UDID}"
-
+          
           # Boot the simulator
           xcrun simctl boot "${SIMULATOR_UDID}"
-
+          
           # Wait for simulator to be ready
           echo "Waiting for simulator to be ready..."
           until xcrun simctl list devices | grep "${SIMULATOR_UDID}" | grep -q "Booted"; do
             sleep 2
-            echo "Still waiting for simulator..."
           done
-
-          # Additional wait to ensure full boot
-          sleep 5
-
+          
           echo "Simulator is ready"
-          xcrun simctl list devices | grep "${SIMULATOR_UDID}"
-
-          # Set environment variable for later use
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
       - name: Build and Test
