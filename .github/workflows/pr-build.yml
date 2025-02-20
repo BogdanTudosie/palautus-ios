@@ -1,7 +1,10 @@
 name: iOS Pull Request
 on:
   pull_request:
-    branches: [ main, develop ]
+    branches:
+      - develop
+      - feature-branch
+      - main
     paths:
       - '**.swift'
       - '**.xcodeproj/**'
@@ -47,7 +50,19 @@ jobs:
           xcrun simctl boot "${SIMULATOR_UDID}"
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
-      - name: Build and Test
+      - name: Build
+        run: |
+          xcodebuild clean test \
+          -project palautus.xcodeproj \
+          -scheme palautus \
+          -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+          -sdk iphonesimulator \
+          -enableCodeCoverage YES \
+          CODE_SIGNING_REQUIRED=NO \
+          ONLY_ACTIVE_ARCH=YES \
+          | xcpretty && exit ${PIPESTATUS[0]}
+      
+      - name: Test
         run: |
             xcodebuild clean test \
               -project palautus.xcodeproj \
