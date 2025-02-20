@@ -1,10 +1,11 @@
 name: Check Unused Code
 
 on:
-    pull_request:
-      branches: [ main ]
-    push:
-      branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
 jobs:
     periphery:
       runs-on: macos-latest
@@ -14,7 +15,7 @@ jobs:
         - name: Select Xcode
           run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
-        - name: Download iOS 18.2 Platform
+        - name: Download iOS 18.3 Platform
           run: |
             echo "Downloading iOS platform..."
             xcrun xcodebuild -downloadPlatform iOS
