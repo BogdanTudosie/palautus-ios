@@ -17,6 +17,17 @@ jobs:
         - name: Install periphery
           run: brew install periphery
 
+        - name: Build for indexing
+          run: |
+            xcodebuild clean build \
+            -project palautus.xcodeproj \
+            -scheme palautus \
+            -destination "platform=iOS Simulator,name=iPhone 15 Pro" \
+            -sdk iphonesimulator \
+            CODE_SIGNING_REQUIRED=NO \
+            ONLY_ACTIVE_ARCH=YES \
+            | xcpretty && exit ${PIPESTATUS[0]
+
         - name: Run periphery
           run: |
             mkdir -p periphery-reports
