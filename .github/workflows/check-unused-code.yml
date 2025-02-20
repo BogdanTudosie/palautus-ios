@@ -20,7 +20,7 @@ jobs:
         - name: Run periphery
           run: |
             mkdir -p periphery-reports
-            periphery scan --project palautus.xcodeproj --schemes palautus --format json > periphery-reports/report.json
+            periphery scan --project palautus.xcodeproj --schemes palautus --format json --skip-build > periphery-reports/report.json
 
         - name: Upload Periphery Reports
           uses: actions/upload-artifact@v4
