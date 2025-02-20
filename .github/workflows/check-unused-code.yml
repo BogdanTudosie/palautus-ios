@@ -30,7 +30,7 @@ jobs:
             SIMULATOR_NAME="iPhone 14"
             
             # Use iOS 18.3 runtime
-            RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-3-1"
+            RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-3"
             echo "Using runtime: ${RUNTIME_ID}"
             
             SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "${RUNTIME_ID}")
