@@ -52,7 +52,7 @@ jobs:
 
       - name: Build
         run: |
-          xcodebuild clean test \
+          xcodebuild clean build test \
           -project palautus.xcodeproj \
           -scheme palautus \
           -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
