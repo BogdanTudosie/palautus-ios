@@ -11,6 +11,9 @@ jobs:
       steps:
         - uses: actions/checkout@v4
 
+        - name: Select Xcode
+          run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
         - name: Install periphery
           run: brew install periphery
 
