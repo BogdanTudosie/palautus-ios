@@ -14,6 +14,31 @@ jobs:
         - name: Select Xcode
           run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
+        - name: Download iOS 18.2 Platform
+          run: |
+            echo "Downloading iOS platform..."
+            xcrun xcodebuild -downloadPlatform iOS
+            
+            echo "Waiting for download to complete..."
+            sleep 30
+            
+            echo "\nAvailable runtimes after download:"
+            xcrun simctl list runtimes
+  
+        - name: Create and Boot Simulator
+          run: |
+            SIMULATOR_NAME="iPhone 14"
+            
+            # Use iOS 18.2 runtime
+            RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-2"
+            echo "Using runtime: ${RUNTIME_ID}"
+            
+            SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "${RUNTIME_ID}")
+            echo "Created simulator: ${SIMULATOR_UDID}"
+            
+            xcrun simctl boot "${SIMULATOR_UDID}"
+            echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
+
         - name: Install periphery
           run: brew install periphery
 
