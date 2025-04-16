@@ -6,10 +6,10 @@ on:
       - feature-branch
       - main
     paths:
-      - '**.swift'
-      - '**.xcodeproj/**'
-      - '**.plist'
-      - '.github/workflows/**'
+      - "**.swift"
+      - "**.xcodeproj/**"
+      - "**.plist"
+      - ".github/workflows/**"
 
 jobs:
   build-and-test:
@@ -29,32 +29,24 @@ jobs:
         run: |
           echo "Downloading iOS platform..."
           xcrun xcodebuild -downloadPlatform iOS
-          
+
           echo "Waiting for download to complete..."
           sleep 30
-          
+
           echo "\nAvailable runtimes after download:"
           xcrun simctl list runtimes
 
-      - name: Find and Boot Existing Simulator
-        run: |
-          SIMULATOR_UDID=$(xcrun simctl list devices | grep -E 'iPhone 16 \(' | grep '(Booted)' | awk -F '[()]' '{print $2}' | head -n 1)
-          if [ -z "$SIMULATOR_UDID" ]; then
-            SIMULATOR_UDID=$(xcrun simctl list devices | grep 'iPhone 16 (' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
-            xcrun simctl boot "$SIMULATOR_UDID"
-          fi
-          echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
+      - name: Debug - List available simulators
+        run: xcrun simctl list devices
 
-      - name: Create and Boot Simulator (safe)
+      - name: Use Existing iPhone 16 Simulator (iOS 18.1 or 18.2)
         run: |
-          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-3-1"
-          if ! xcrun simctl list runtimes | grep -q "$RUNTIME_ID"; then
-            echo "Runtime $RUNTIME_ID not found!"
+          SIMULATOR_UDID=$(xcrun simctl list devices | grep -E 'iPhone 16 \(' | grep -E '18.1|18.2' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "No suitable iPhone 16 simulator found!"
             exit 1
           fi
-          SIMULATOR_UDID=$(xcrun simctl create "iPhone 14" "iPhone 14" "$RUNTIME_ID")
-          echo "Created simulator: ${SIMULATOR_UDID}"
-          xcrun simctl boot "${SIMULATOR_UDID}"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
       - name: Build
@@ -68,7 +60,7 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=YES \
           | xcpretty && exit ${PIPESTATUS[0]}
-      
+
       - name: Test
         run: |
           xcodebuild clean test \
@@ -118,33 +110,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Run Trivy vulnerability scanner (JSON)
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        format: 'json'
-        output: 'trivy-report.json'
-        severity: 'CRITICAL,HIGH,MEDIUM'
-        ignore-unfixed: true
+      - name: Run Trivy vulnerability scanner (JSON)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          format: "json"
+          output: "trivy-report.json"
+          severity: "CRITICAL,HIGH,MEDIUM"
+          ignore-unfixed: true
 
-    - name: Upload Trivy JSON Report
-      uses: actions/upload-artifact@v4
-      with:
-        name: trivy-json-report
-        path: trivy-report.json
+      - name: Upload Trivy JSON Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-json-report
+          path: trivy-report.json
 
-    - name: Download Trivy HTML Template
-      run: |
-        curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
-  
-    - name: Run Trivy vulnerability scanner (HTML)
-      run: |
-        trivy fs --format template --template "html.tpl" --output trivy-report.html --severity CRITICAL,HIGH,MEDIUM .
-  
-    - name: Upload Trivy HTML Report
-      uses: actions/upload-artifact@v4
-      with:
-        name: trivy-html-report
-        path: trivy-report.html
+      - name: Download Trivy HTML Template
+        run: |
+          curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
+
+      - name: Run Trivy vulnerability scanner (HTML)
+        run: |
+          trivy fs --format template --template "html.tpl" --output trivy-report.html --severity CRITICAL,HIGH,MEDIUM .
+
+      - name: Upload Trivy HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-html-report
+          path: trivy-report.html
