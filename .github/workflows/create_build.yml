@@ -1,0 +1,77 @@
+name: Build and Test on Demand
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Select the branch to build and test'
+        required: true
+        type: choice
+        options:
+          - main
+          - develop
+          - feature-branch
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.inputs.branch }}
+
+    - name: Set up Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '16.2'
+
+    - name: Resolve Swift Package Manager dependencies
+      run: |
+        xcodebuild -resolvePackageDependencies -project palautus.xcodeproj
+
+    - name: Build
+      run: |
+        xcodebuild clean build \
+        -project palautus.xcodeproj \
+        -scheme palautus \
+        -sdk iphonesimulator \
+        -destination 'platform=iOS Simulator,name=iPhone 14,OS=15.6' \
+        ONLY_ACTIVE_ARCH=NO
+
+    - name: Run tests
+      run: |
+        xcodebuild test \
+        -project palautus.xcodeproj \
+        -scheme palautus \
+        -sdk iphonesimulator \
+        -destination 'platform=iOS Simulator,name=iPhone 14,OS=15.6' \
+      
+    - name: Create exportOptions.plist
+      run: |
+        cat <<EOF > ${{ github.workspace }}/exportOptions.plist
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>app-store</string>
+          <key>teamID</key>
+          <string>${{ secrets.TEAM_ID }}</string>
+          <key>uploadBitcode</key>
+          <false/>
+          <key>compileBitcode</key>
+          <true/>
+          <key>uploadSymbols</key>
+          <true/>
+        </dict>
+        </plist>
+        EOF
+    
+    - name: Create .ipa file
+      run: |
+          xcodebuild -exportArchive \
+          -archivePath ${{ github.workspace }}/build/palautus.xcarchive \
+          -exportPath ${{ github.workspace }}/build \
+          -exportOptionsPlist ${{ github.workspace }}/palautusExportOptions.plist
