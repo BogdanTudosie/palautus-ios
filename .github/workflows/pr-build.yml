@@ -39,16 +39,14 @@ jobs:
       - name: Debug - List available simulators
         run: xcrun simctl list devices
 
-      - name: Create and Boot Simulator (iPhone 16, iOS 18.3)
+      - name: Use Existing iPhone 16 Simulator (iOS 18.3)
         run: |
-          SIMULATOR_NAME="iPhone 16"
-          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-3"
-          SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 16" "${RUNTIME_ID}")
+          SIMULATOR_UDID=$(xcrun simctl list devices | grep 'iPhone 16' | grep '18.3' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
           if [ -z "$SIMULATOR_UDID" ]; then
-            echo "Failed to create simulator!"
+            echo "No suitable iPhone 16 simulator found!"
             exit 1
           fi
-          xcrun simctl boot "${SIMULATOR_UDID}"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
       - name: Build
@@ -85,6 +83,8 @@ jobs:
             cat buildlog.txt
             exit 1
           fi
+
+          xcrun simctl erase "$SIMULATOR_UDID"
 
       - name: Upload Test Results
         if: always()
