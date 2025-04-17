@@ -28,16 +28,16 @@ jobs:
       - name: Download iOS 18.3 Platform
         run: |
           echo "Downloading iOS platform..."
-          xcrun xcodebuild -downloadPlatform iOS
-
-          echo "Waiting for download to complete..."
-          sleep 30
-
+          xcrun simctl runtime add --type=com.apple.CoreSimulator.SimRuntime.iOS-18-3
+      
+          if [ $? -ne 0 ]; then
+            echo "Failed to download iOS 18.3 runtime. Attempting to list available runtimes for verification..."
+            xcrun simctl list runtimes
+            exit 1
+          fi
+      
           echo "\nAvailable runtimes after download:"
           xcrun simctl list runtimes
-
-      - name: Debug - List available simulators
-        run: xcrun simctl list devices
 
       - name: Use Existing iPhone 16 Simulator (iOS 18.3)
         run: |
