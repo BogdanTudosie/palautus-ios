@@ -41,7 +41,14 @@ jobs:
 
       - name: Use Existing iPhone 16 Simulator (iOS 18.x, any variant)
         run: |
-          SIMULATOR_UDID=$(xcrun simctl list devices | grep -E 'iPhone 16' | grep '18.' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
+          SIMULATOR_UDID=$(
+            xcrun simctl list devices |
+            awk '/iOS 18\./{flag=1;next}/^--/{flag=0}flag' |
+            grep 'iPhone 16' |
+            grep -v 'unavailable' |
+            awk -F '[()]' '{print $2}' |
+            head -n 1
+          )
           if [ -z "$SIMULATOR_UDID" ]; then
             echo "No suitable iPhone 16 simulator found!"
             exit 1
