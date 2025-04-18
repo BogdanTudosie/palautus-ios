@@ -53,17 +53,30 @@ jobs:
             echo "No suitable iPhone 16 simulator found!"
             exit 1
           fi
+          
+          echo "Using simulator: $SIMULATOR_UDID"
           xcrun simctl erase "$SIMULATOR_UDID"
           xcrun simctl boot "$SIMULATOR_UDID" || true
 
-          for i in {1..10}; do
+          # Increase timeout and add more logging
+          for i in {1..20}; do
+            echo "Checking simulator status (attempt $i)..."
             BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
             if [ -n "$BOOTED" ]; then
+              echo "Simulator is booted!"
+              xcrun simctl list devices
               break
             fi
             echo "Waiting for simulator to boot..."
-            sleep 6
+            sleep 10
           done
+
+          # Verify simulator is really ready
+          if ! xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
+            echo "Simulator failed to boot properly"
+            exit 1
+          fi
+          
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
       - name: Cache Build Data
@@ -78,6 +91,11 @@ jobs:
 
       - name: Build and Test
         run: |
+          # Pre-test validation
+          echo "Verifying simulator status..."
+          xcrun simctl list devices
+          
+          echo "Running tests..."
           xcodebuild test \
           -project palautus.xcodeproj \
           -scheme palautus \
@@ -90,7 +108,15 @@ jobs:
           -configuration Debug \
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=YES \
-          | xcpretty --color --simple && exit ${PIPESTATUS[0]}
+          | tee xcodebuild.log \
+          | xcpretty --color --simple
+          
+          # Show full log if tests fail
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "Tests failed. Full build log:"
+            cat xcodebuild.log
+            exit 1
+          fi
 
       - name: Upload Test Results
         if: always()
