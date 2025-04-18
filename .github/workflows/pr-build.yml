@@ -66,42 +66,31 @@ jobs:
           done
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Cache Build Data
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            Build/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
+      - name: Build and Test
         run: |
-          xcodebuild clean build test \
+          xcodebuild test \
           -project palautus.xcodeproj \
           -scheme palautus \
           -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
           -sdk iphonesimulator \
           -enableCodeCoverage YES \
+          -parallel-testing-enabled YES \
+          -maximum-parallel-testing-workers 2 \
+          -derivedDataPath Build/DerivedData \
+          -configuration Debug \
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=YES \
-          | xcpretty && exit ${PIPESTATUS[0]}
-
-      - name: Test
-        run: |
-          xcodebuild clean test \
-            -project palautus.xcodeproj \
-            -scheme palautus \
-            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
-            -sdk iphonesimulator \
-            -enableCodeCoverage YES \
-            CODE_SIGNING_REQUIRED=NO \
-            ONLY_ACTIVE_ARCH=YES \
-            -resultBundlePath TestResults \
-            -testPlan palautus \
-            -verbose \
-            | tee buildlog.txt \
-            | xcpretty && exit ${PIPESTATUS[0]}
-
-          # If tests fail, show the full log
-          if [ $? -ne 0 ]; then
-            echo "Tests failed. Full build log:"
-            cat buildlog.txt
-            exit 1
-          fi
-
-          xcrun simctl erase "$SIMULATOR_UDID"
+          | xcpretty --color --simple && exit ${PIPESTATUS[0]}
 
       - name: Upload Test Results
         if: always()
