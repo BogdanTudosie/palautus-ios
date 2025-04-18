@@ -55,6 +55,15 @@ jobs:
           fi
           xcrun simctl erase "$SIMULATOR_UDID"
           xcrun simctl boot "$SIMULATOR_UDID" || true
+
+          for i in {1..10}; do
+            BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
+            if [ -n "$BOOTED" ]; then
+              break
+            fi
+            echo "Waiting for simulator to boot..."
+            sleep 6
+          done
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
       - name: Build
