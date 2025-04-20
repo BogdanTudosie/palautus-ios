@@ -89,7 +89,7 @@ jobs:
           for i in {1..30}; do
             echo "Checking simulator status (attempt $i)..."
             BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
-            if [ -n "$BOOTED"; then
+            if [ -n "$BOOTED" ]; then
               echo "Simulator is booted!"
               xcrun simctl list devices
               break
