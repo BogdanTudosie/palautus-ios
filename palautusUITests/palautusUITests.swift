@@ -15,11 +15,10 @@ final class PalautusUITests: XCTestCase {
         
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing"]
-        app.launchEnvironment = ["UITESTING": "1"]
-        
-        // Set the correct bundle ID if different from target
-        app.bundleIdentifier = "fi.hgb.palautus" // Adjust this to match your main app bundle ID
-        
+        app.launchEnvironment = [
+            "UITESTING": "1",
+            "APP_BUNDLE_ID": "fi.hgb.palautus"
+        ]
         app.launch()
     }
 
@@ -29,19 +28,19 @@ final class PalautusUITests: XCTestCase {
 
     @MainActor
     func testExample() throws {
-        // UI tests must launch the application that they test.
+        // Remove duplicate launch
         let app = XCUIApplication()
-        app.launch()
-
+        
         // Use XCTAssert and related functions to verify your tests produce the correct results.
+        XCTAssertTrue(app.exists)
     }
 
     @MainActor
     func testLaunchPerformance() throws {
         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 7.0, *) {
-            // This measures how long it takes to launch your application.
             measure(metrics: [XCTApplicationLaunchMetric()]) {
-                XCUIApplication().launch()
+                let app = XCUIApplication()
+                app.launch()
             }
         }
     }
