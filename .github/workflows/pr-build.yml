@@ -28,7 +28,13 @@ jobs:
       - name: Download iOS 18.3 Platform
         run: |
           echo "Downloading iOS platform..."
-          xcrun xcodebuild -downloadPlatform iOS
+          RETRIES=5
+          for i in $(seq 1 $RETRIES); do
+            echo "Attempt $i to download iOS 18.3 platform..."
+            xcrun xcodebuild -downloadPlatform iOS && break
+            echo "Download failed. Retrying in 10 seconds..."
+            sleep 10
+          done
 
           echo "Waiting for download to complete..."
           sleep 30
@@ -39,8 +45,13 @@ jobs:
           # Check if the specific simulator is available
           SIMULATOR_EXISTS=$(xcrun simctl list devices | grep 'iPhone 16' | grep 'iOS 18' || true)
           if [ -z "$SIMULATOR_EXISTS" ]; then
-            echo "iPhone 16 simulator for iOS 18.x not found. Downloading it now..."
-            xcrun simctl runtime install "iOS 18.3"
+            echo "iPhone 16 simulator for iOS 18.x not found. Downloading it now with retries..."
+            for i in $(seq 1 $RETRIES); do
+              echo "Attempt $i to install the iOS 18.3 simulator..."
+              xcrun simctl runtime install "iOS 18.3" && break
+              echo "Simulator installation failed. Retrying in 10 seconds..."
+              sleep 10
+            done
           else
             echo "iPhone 16 simulator for iOS 18.x is already installed."
           fi
