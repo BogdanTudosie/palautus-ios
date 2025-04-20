@@ -61,6 +61,7 @@ jobs:
 
       - name: Use Existing iPhone 16 Simulator (iOS 18.x, any variant)
         run: |
+          # Find existing simulator
           SIMULATOR_UDID=$(
             xcrun simctl list devices |
             awk '/iOS 18\./{flag=1;next}/^--/{flag=0}flag' |
@@ -74,14 +75,17 @@ jobs:
             exit 1
           fi
 
-          echo "Resetting the simulator state..."
-          xcrun simctl shutdown "$SIMULATOR_UDID" || true
-          xcrun simctl erase "$SIMULATOR_UDID"
-
           echo "Using simulator: $SIMULATOR_UDID"
-          xcrun simctl boot "$SIMULATOR_UDID" || true
-
-          # Increase retries and timeout
+          
+          # Clean up any existing state
+          xcrun simctl shutdown all
+          xcrun simctl erase "$SIMULATOR_UDID"
+          
+          # Boot with increased timeout
+          echo "Booting simulator..."
+          xcrun simctl boot "$SIMULATOR_UDID"
+          
+          # Wait up to 5 minutes for boot
           for i in {1..30}; do
             echo "Checking simulator status (attempt $i)..."
             BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
@@ -90,13 +94,14 @@ jobs:
               xcrun simctl list devices
               break
             fi
-            echo "Waiting for simulator to boot..."
-            sleep 15
+            echo "Waiting for simulator to boot (${i}/30)..."
+            sleep 10
           done
 
-          # Verify simulator is really ready
+          # Verify simulator is ready
           if ! xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
-            echo "Simulator failed to boot properly"
+            echo "ERROR: Simulator failed to boot within 5 minutes"
+            xcrun simctl list devices
             exit 1
           fi
 
@@ -114,10 +119,6 @@ jobs:
 
       - name: Build and Test
         run: |
-          # Pre-test validation
-          echo "Verifying simulator status..."
-          xcrun simctl list devices
-
           echo "Running tests..."
           xcodebuild test \
           -project palautus.xcodeproj \
@@ -125,12 +126,12 @@ jobs:
           -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
           -sdk iphonesimulator \
           -enableCodeCoverage YES \
-          -parallel-testing-enabled YES \
-          -maximum-parallel-testing-workers 2 \
+          -parallel-testing-enabled NO \
           -derivedDataPath Build/DerivedData \
           -configuration Debug \
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=YES \
+          EXCLUDED_ARCHS="arm64" \
           | tee xcodebuild.log \
           | xcpretty --color --simple
 
@@ -138,7 +139,6 @@ jobs:
             echo "Tests failed. Full build log:"
             cat xcodebuild.log
             exit 1
-          fi
 
       - name: Upload Test Results
         if: always()
