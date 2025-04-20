@@ -119,9 +119,15 @@ jobs:
 
       - name: Build and Test
         run: |
-          # Ensure simulator is ready
-          xcrun simctl boot "${SIMULATOR_UDID}" || true
-          sleep 10
+          # Check simulator state first
+          BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
+          if [ -z "$BOOTED" ]; then
+            echo "Booting simulator..."
+            xcrun simctl boot "${SIMULATOR_UDID}" || true
+            sleep 10
+          else
+            echo "Simulator already booted"
+          fi
 
           echo "Running tests..."
           xcodebuild test \
@@ -132,8 +138,6 @@ jobs:
           -enableCodeCoverage YES \
           -parallel-testing-enabled NO \
           -retry-tests-on-failure \
-          -test-iterations 1 \
-          -only-testing:palautusUITests \
           -derivedDataPath Build/DerivedData \
           -configuration Debug \
           CODE_SIGNING_REQUIRED=NO \
