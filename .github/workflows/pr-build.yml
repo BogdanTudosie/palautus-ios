@@ -151,6 +151,8 @@ jobs:
             echo "Build/Test failed with status $BUILD_STATUS. Full log:"
             cat xcodebuild.log
             exit 1
+          fi
+          echo "Build/Test succeeded!"
 
       - name: Upload Test Results
         if: always()
