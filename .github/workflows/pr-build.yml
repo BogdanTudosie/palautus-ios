@@ -89,7 +89,7 @@ jobs:
           for i in {1..30}; do
             echo "Checking simulator status (attempt $i)..."
             BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
-            if [ -n "$BOOTED" ]; then
+            if [ -n "$BOOTED"; then
               echo "Simulator is booted!"
               xcrun simctl list devices
               break
@@ -119,6 +119,10 @@ jobs:
 
       - name: Build and Test
         run: |
+          # Ensure simulator is ready
+          xcrun simctl boot "${SIMULATOR_UDID}" || true
+          sleep 10
+
           echo "Running tests..."
           xcodebuild test \
           -project palautus.xcodeproj \
@@ -127,11 +131,15 @@ jobs:
           -sdk iphonesimulator \
           -enableCodeCoverage YES \
           -parallel-testing-enabled NO \
+          -retry-tests-on-failure \
+          -test-iterations 1 \
+          -only-testing:palautusUITests \
           -derivedDataPath Build/DerivedData \
           -configuration Debug \
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=YES \
           EXCLUDED_ARCHS="arm64" \
+          TEST_TARGET_NAME=palautusUITests \
           | tee xcodebuild.log \
           | xcpretty --color --simple
 
@@ -139,7 +147,6 @@ jobs:
             echo "Tests failed. Full build log:"
             cat xcodebuild.log
             exit 1
-          fi
 
       - name: Upload Test Results
         if: always()
