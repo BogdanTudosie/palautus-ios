@@ -119,36 +119,36 @@ jobs:
 
       - name: Build and Test
         run: |
-          # Check simulator state first
+          # Ensure simulator is ready
           BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
           if [ -z "$BOOTED" ]; then
             echo "Booting simulator..."
             xcrun simctl boot "${SIMULATOR_UDID}" || true
             sleep 10
-          else
-            echo "Simulator already booted"
           fi
 
-          echo "Running tests..."
-          xcodebuild test \
+          echo "Building and testing..."
+          xcodebuild clean build test \
           -project palautus.xcodeproj \
           -scheme palautus \
           -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
           -sdk iphonesimulator \
+          -configuration Debug \
           -enableCodeCoverage YES \
           -parallel-testing-enabled NO \
           -retry-tests-on-failure \
           -derivedDataPath Build/DerivedData \
-          -configuration Debug \
+          -allowProvisioningUpdates \
           CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_ALLOWED=NO \
           ONLY_ACTIVE_ARCH=YES \
-          EXCLUDED_ARCHS="arm64" \
-          TEST_TARGET_NAME=palautusUITests \
           | tee xcodebuild.log \
           | xcpretty --color --simple
 
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "Tests failed. Full build log:"
+          BUILD_STATUS=${PIPESTATUS[0]}
+          if [ $BUILD_STATUS -ne 0 ]; then
+            echo "Build/Test failed with status $BUILD_STATUS. Full log:"
             cat xcodebuild.log
             exit 1
 
