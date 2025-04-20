@@ -114,19 +114,26 @@ jobs:
 
       - name: Build and Test
         run: |
-          echo "Running UI tests..."
-          xcodebuild test \
-            -project palautus.xcodeproj \
-            -scheme palautus \
-            -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
-            -only-testing:palautusUITests/PalautusUITestsLaunchTests/testLaunch \
-            -sdk iphonesimulator \
-            -derivedDataPath Build/DerivedData \
-            -configuration Debug \
-            | tee xcodebuild.log \
-            | xcpretty --color --simple
+          # Pre-test validation
+          echo "Verifying simulator status..."
+          xcrun simctl list devices
 
-          # Show full log if tests fail
+          echo "Running tests..."
+          xcodebuild test \
+          -project palautus.xcodeproj \
+          -scheme palautus \
+          -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+          -sdk iphonesimulator \
+          -enableCodeCoverage YES \
+          -parallel-testing-enabled YES \
+          -maximum-parallel-testing-workers 2 \
+          -derivedDataPath Build/DerivedData \
+          -configuration Debug \
+          CODE_SIGNING_REQUIRED=NO \
+          ONLY_ACTIVE_ARCH=YES \
+          | tee xcodebuild.log \
+          | xcpretty --color --simple
+
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "Tests failed. Full build log:"
             cat xcodebuild.log
