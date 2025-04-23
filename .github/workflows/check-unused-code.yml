@@ -130,20 +130,23 @@ jobs:
           # Create output directory
           mkdir -p periphery-reports
 
-          # Run periphery with absolute paths
+          # Run periphery with correct options
           periphery scan \
             --project "${GITHUB_WORKSPACE}/palautus.xcodeproj" \
             --schemes palautus \
             --format json \
             --index-store-path "${HOME}/Library/Developer/Xcode/DerivedData/palautus-*/Index/DataStore" \
-            --retain-objc-metadata \
             --skip-build \
             --quiet > periphery-reports/report.json || true
-            
+
           # Check if report was generated
           if [ -f periphery-reports/report.json ]; then
             echo "✅ Periphery scan completed"
             echo "📊 Results saved to periphery-reports/report.json"
+            
+            # Display summary of findings
+            echo "📝 Unused code summary:"
+            jq -r '.results | length' periphery-reports/report.json
           else
             echo "⚠️ Warning: No report file generated"
 
