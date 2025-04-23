@@ -24,19 +24,24 @@ jobs:
         id: find-runtime
         run: |
           echo "Looking for available iOS runtimes..."
+          # Simplified jq query that properly handles the boolean
           RUNTIME_ID=$(xcrun simctl list -j runtimes | \
-            jq -r '.runtimes[] | select(.platform == "iOS" and .isAvailable == true and .version | test("^17")) | .identifier' | head -n 1)
+            jq -r '.runtimes[] | select(.platform=="iOS" and .isAvailable==true) | 
+            select(.version | startswith("17.")) | .identifier' | head -n 1)
 
           if [[ -z "$RUNTIME_ID" ]]; then
             echo "⚠️ No iOS 17 runtime found, attempting download..."
             xcrun xcodebuild -downloadPlatform iOS
 
-            # Check again after download
+            # Check again after download with fixed query
             RUNTIME_ID=$(xcrun simctl list -j runtimes | \
-              jq -r '.runtimes[] | select(.platform == "iOS" and .isAvailable == true and .version | test("^17")) | .identifier' | head -n 1)
+              jq -r '.runtimes[] | select(.platform=="iOS" and .isAvailable==true) | 
+              select(.version | startswith("17.")) | .identifier' | head -n 1)
 
             if [[ -z "$RUNTIME_ID" ]]; then
               echo "❌ Failed to find or download iOS 17 runtime"
+              echo "Available runtimes:"
+              xcrun simctl list runtimes
               exit 1
             fi
           fi
