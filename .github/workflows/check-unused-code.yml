@@ -161,9 +161,25 @@ jobs:
             echo "✅ Periphery scan completed"
             echo "📊 Results saved to periphery-reports/report.json"
             
-            # Display summary of findings
-            UNUSED_COUNT=$(jq -r '.results | length' periphery-reports/report.json)
-            echo "📝 Found $UNUSED_COUNT unused code items"
+            # First check if the file has content
+            if [ -s periphery-reports/report.json ]; then
+              # Display first few lines to help debug format
+              echo "Report preview:"
+              head -n 10 periphery-reports/report.json
+              
+              # Check the structure of the JSON first (array or object)
+              if grep -q "^\[" periphery-reports/report.json; then
+                # It's an array, count the elements
+                UNUSED_COUNT=$(jq '. | length' periphery-reports/report.json)
+                echo "📝 Found $UNUSED_COUNT unused code items (array format)"
+              else
+                # Try to handle object with results field or other formats
+                UNUSED_COUNT=$(jq -r 'if has("results") then .results | length else if has("unused_declarations") then .unused_declarations | length else "unknown format" end end' periphery-reports/report.json || echo "parsing error")
+                echo "📝 Found $UNUSED_COUNT unused code items"
+              fi
+            else
+              echo "⚠️ Report file is empty"
+            fi
           else
             echo "⚠️ Warning: No report file generated"
           fi
