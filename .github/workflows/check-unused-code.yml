@@ -20,31 +20,56 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.2.app
           xcodebuild -version
 
-      - name: 📱 Setup iOS Simulator
-        id: simulator
+      - name: 🔍 Find available iOS runtime
+        id: find-runtime
         run: |
-          echo "Setting up iOS Simulator..."
+          echo "Looking for available iOS runtimes..."
+          RUNTIME_ID=$(xcrun simctl list -j runtimes | \
+            jq -r '.runtimes[] | select(.platform == "iOS" and .isAvailable == true and .version | test("^17")) | .identifier' | head -n 1)
 
-          # Find available iOS 17.x simulator
-          RUNTIME_ID=$(xcrun simctl list runtimes | grep "iOS 17" | head -n 1 | awk '{print $NF}')
-          if [ -z "$RUNTIME_ID" ]; then
-            echo "⚠️ iOS 17 runtime not found, downloading..."
+          if [[ -z "$RUNTIME_ID" ]]; then
+            echo "⚠️ No iOS 17 runtime found, attempting download..."
             xcrun xcodebuild -downloadPlatform iOS
-            RUNTIME_ID=$(xcrun simctl list runtimes | grep "iOS 17" | head -n 1 | awk '{print $NF}')
+            
+            # Check again after download
+            RUNTIME_ID=$(xcrun simctl list -j runtimes | \
+              jq -r '.runtimes[] | select(.platform == "iOS" and .isAvailable == true and .version | test("^17")) | .identifier' | head -n 1)
+            
+            if [[ -z "$RUNTIME_ID" ]]; then
+              echo "❌ Failed to find or download iOS 17 runtime"
+              exit 1
+            fi
           fi
 
-          echo "📱 Using runtime: $RUNTIME_ID"
+          echo "✅ Found runtime: $RUNTIME_ID"
+          echo "RUNTIME_ID=$RUNTIME_ID" >> $GITHUB_ENV
 
-          # Create and boot simulator
-          DEVICE_ID=$(xcrun simctl create "iPhone 16" \
-            com.apple.CoreSimulator.SimDeviceType.iPhone-16 \
-            $RUNTIME_ID)
+      - name: 📱 Create and Boot Simulator
+        id: boot-sim
+        run: |
+          SIMULATOR_NAME="iPhone 14"
+          RUNTIME_ID=${{ env.RUNTIME_ID }}
 
-          echo "🚀 Booting simulator: $DEVICE_ID"
-          xcrun simctl boot "$DEVICE_ID"
+          # Create simulator
+          SIMULATOR_UDID=$(xcrun simctl create "$SIMULATOR_NAME" \
+            "com.apple.CoreSimulator.SimDeviceType.${SIMULATOR_NAME}" \
+            "$RUNTIME_ID")
+          echo "📱 Created simulator: $SIMULATOR_UDID"
 
-          # Export for other steps
-          echo "DEVICE_ID=$DEVICE_ID" >> $GITHUB_ENV
+          # Boot simulator
+          xcrun simctl boot "$SIMULATOR_UDID"
+
+          # Wait for boot
+          for i in {1..12}; do
+            if xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
+              echo "✅ Simulator booted successfully"
+              break
+            fi
+            echo "⏳ Waiting for simulator to boot (attempt $i/12)..."
+            sleep 5
+          done
+
+          echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> $GITHUB_ENV
 
       - name: 💾 Cache Dependencies
         uses: actions/cache@v3
@@ -70,7 +95,7 @@ jobs:
           xcodebuild clean build \
           -project palautus.xcodeproj \
           -scheme palautus \
-          -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+          -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
           -sdk iphonesimulator \
           -derivedDataPath ~/Library/Developer/Xcode/DerivedData \
           CODE_SIGNING_REQUIRED=NO \
