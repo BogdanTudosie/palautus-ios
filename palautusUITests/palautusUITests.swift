@@ -10,31 +10,37 @@ import XCTest
 final class PalautusUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
+        super.setUp()
         continueAfterFailure = false
+        
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launchEnvironment = [
+            "UITESTING": "1",
+            "APP_BUNDLE_ID": "fi.hgb.palautus"
+        ]
+        app.launch()
     }
 
     override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+        // Put teardown code here. This method is called before the invocation of each test method in the class.
     }
 
     @MainActor
     func testExample() throws {
-        // UI tests must launch the application that they test.
+        // Remove duplicate launch
         let app = XCUIApplication()
-        app.launch()
-
+        
         // Use XCTAssert and related functions to verify your tests produce the correct results.
+        XCTAssertTrue(app.exists)
     }
 
     @MainActor
     func testLaunchPerformance() throws {
         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 7.0, *) {
-            // This measures how long it takes to launch your application.
             measure(metrics: [XCTApplicationLaunchMetric()]) {
-                XCUIApplication().launch()
+                let app = XCUIApplication()
+                app.launch()
             }
         }
     }

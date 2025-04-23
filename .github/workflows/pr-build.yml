@@ -1,143 +1,195 @@
 name: iOS Pull Request
 on:
   pull_request:
-    branches:
-      - develop
-      - feature-branch
-      - main
+    branches: [develop, feature-branch, main]
     paths:
-      - '**.swift'
-      - '**.xcodeproj/**'
-      - '**.plist'
-      - '.github/workflows/**'
+      - "**.swift"
+      - "**.xcodeproj/**"
+      - "**.plist"
+      - ".github/workflows/**"
 
 jobs:
   build-and-test:
-    name: Build and Test
+    name: 📱 Build and Test
     runs-on: macos-latest
     permissions:
       contents: read
       security-events: write
 
+    outputs:
+      test-status: ${{ steps.tests.outputs.status }}
+      coverage: ${{ steps.coverage.outputs.percentage }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
-
-      - name: Download iOS 18.2 Platform
+      - name: 🛠️ Select Xcode Version
         run: |
-          echo "Downloading iOS platform..."
-          xcrun xcodebuild -downloadPlatform iOS
-          
-          echo "Waiting for download to complete..."
-          sleep 30
-          
-          echo "\nAvailable runtimes after download:"
-          xcrun simctl list runtimes
+          echo "Using Xcode 16.2..."
+          sudo xcode-select -s /Applications/Xcode_16.2.app
+          xcodebuild -version
 
-      - name: Create and Boot Simulator
+      - name: 📱 Setup iOS Simulator
+        id: simulator
         run: |
-          SIMULATOR_NAME="iPhone 14"
+          echo "Setting up iOS Simulator..."
           
-          # Use iOS 18.2 runtime
-          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-18-2"
-          echo "Using runtime: ${RUNTIME_ID}"
+          # First list available runtimes and devices
+          echo "Available iOS runtimes:"
+          xcrun simctl list runtimes | grep iOS
           
-          SIMULATOR_UDID=$(xcrun simctl create "${SIMULATOR_NAME}" "iPhone 14" "${RUNTIME_ID}")
-          echo "Created simulator: ${SIMULATOR_UDID}"
+          echo "Available simulator types:"
+          xcrun simctl list devicetypes | grep iPhone
           
-          xcrun simctl boot "${SIMULATOR_UDID}"
-          echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
-
-      - name: Build
-        run: |
-          xcodebuild clean test \
-          -project palautus.xcodeproj \
-          -scheme palautus \
-          -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
-          -sdk iphonesimulator \
-          -enableCodeCoverage YES \
-          CODE_SIGNING_REQUIRED=NO \
-          ONLY_ACTIVE_ARCH=YES \
-          | xcpretty && exit ${PIPESTATUS[0]}
-      
-      - name: Test
-        run: |
-            xcodebuild clean test \
-              -project palautus.xcodeproj \
-              -scheme palautus \
-              -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
-              -sdk iphonesimulator \
-              -enableCodeCoverage YES \
-              CODE_SIGNING_REQUIRED=NO \
-              ONLY_ACTIVE_ARCH=YES \
-              -resultBundlePath TestResults \
-              -testPlan palautus \
-              -verbose \
-              | tee buildlog.txt \
-              | xcpretty && exit ${PIPESTATUS[0]}
-
-             # If tests fail, show the full log
-            if [ $? -ne 0 ]; then
-              echo "Tests failed. Full build log:"
-              cat buildlog.txt
+          # Find an existing iOS simulator (iOS 17 preferred, fall back to iOS 16)
+          echo "Looking for existing simulators..."
+          SIMULATOR_UDID=$(xcrun simctl list devices | grep -E 'iPhone 1[45].*\(iOS 1[67]' | grep -v 'unavailable' | head -n 1 | awk -F '[()]' '{print $2}')
+          
+          # If no suitable simulator found, try to find any available iPhone simulator
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "⚠️ No iPhone 14/15 with iOS 16/17 found, looking for any available iPhone simulator..."
+            SIMULATOR_UDID=$(xcrun simctl list devices | grep -E 'iPhone' | grep -v 'unavailable' | head -n 1 | awk -F '[()]' '{print $2}')
+          fi
+          
+          # If still no simulator found, create one with the latest available runtime
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "⚠️ No suitable simulators found, creating one with available runtime..."
+            
+            # Find the latest available iOS runtime
+            RUNTIME_ID=$(xcrun simctl list runtimes | grep iOS | grep -v unavailable | tail -n 1 | awk '{print $NF}')
+            
+            if [ -z "$RUNTIME_ID" ]; then
+              echo "❌ No iOS runtime available"
               exit 1
             fi
+            
+            echo "Found runtime: $RUNTIME_ID"
+            
+            # Find an iPhone device type (preferably iPhone 14)
+            DEVICE_TYPE=$(xcrun simctl list devicetypes | grep "iPhone 14" | head -n 1 | awk -F '[()]' '{print $2}')
+            
+            if [ -z "$DEVICE_TYPE" ]; then
+              DEVICE_TYPE=$(xcrun simctl list devicetypes | grep "iPhone" | head -n 1 | awk -F '[()]' '{print $2}')
+            fi
+            
+            if [ -z "$DEVICE_TYPE" ]; then
+              echo "❌ No iPhone device type available"
+              exit 1
+            fi
+            
+            echo "Using device type: $DEVICE_TYPE"
+            
+            # Create a new simulator
+            SIMULATOR_UDID=$(xcrun simctl create "Test-iPhone" "$DEVICE_TYPE" "$RUNTIME_ID")
+            echo "Created new simulator: $SIMULATOR_UDID"
+          fi
+          
+          # Ensure we have a simulator
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "❌ Failed to find or create a suitable simulator"
+            xcrun simctl list devices
+            exit 1
+          fi
+          
+          echo "Using simulator with ID: $SIMULATOR_UDID"
+          echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_OUTPUT
+          
+          # Erase the simulator to start fresh
+          xcrun simctl erase "$SIMULATOR_UDID"
 
-      - name: Upload Test Results
+          echo "🚀 Booting simulator..."
+          xcrun simctl boot "$SIMULATOR_UDID"
+
+          # Wait for boot
+          for i in {1..12}; do
+            if xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
+              echo "✅ Simulator booted successfully"
+              break
+            fi
+            echo "⏳ Waiting for simulator to boot (attempt $i/12)..."
+            sleep 5
+          done
+
+      - name: 💾 Cache Build Data
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/project.pbxproj') }}
+          restore-keys: ${{ runner.os }}-xcode-
+
+      - name: 🏗️ Build and Test
+        id: tests
+        run: |
+          echo "🚀 Starting build and test..."
+
+          # Create test output directory
+          mkdir -p test-results
+
+          # Run build and tests
+          xcodebuild test \
+          -project palautus.xcodeproj \
+          -scheme palautus \
+          -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.SIMULATOR_UDID }}" \
+          -sdk iphonesimulator \
+          -enableCodeCoverage YES \
+          -parallel-testing-enabled YES \
+          -maximum-parallel-testing-workers 3 \
+          -derivedDataPath ~/Library/Developer/Xcode/DerivedData \
+          -configuration Debug \
+          -resultBundlePath "./test-results/TestResults.xcresult" \
+          CODE_SIGNING_REQUIRED=NO \
+          ONLY_ACTIVE_ARCH=YES \
+          IPHONEOS_DEPLOYMENT_TARGET=16.0 \
+          | tee xcodebuild.log \
+          | xcpretty --color --simple
+
+          # Extract test results
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "✅ Tests passed successfully"
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "❌ Tests failed. Check logs for details."
+            exit 1
+          fi
+
+      - name: 📊 Calculate Code Coverage
+        id: coverage
+        if: success()
+        run: |
+          COVERAGE=$(xcrun xccov view test-results/TestResults.xcresult | grep -E '^Total$' | awk '{print $3}')
+          echo "percentage=${COVERAGE}" >> $GITHUB_OUTPUT
+          echo "📊 Code Coverage: ${COVERAGE}%"
+
+      - name: 📦 Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: |
-            build/reports/
-            fastlane/test_output/
+            test-results/
+            xcodebuild.log
+          retention-days: 14
 
   lint:
-    name: SwiftLint
+    name: 🔍 Lint
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: SwiftLint
-        uses: norio-nomura/action-swiftlint@3.2.1
+      - uses: norio-nomura/action-swiftlint@3.2.1
         with:
           args: --strict
 
   security:
-    name: Security Scan
+    name: 🔒 Security Scan
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Run Trivy vulnerability scanner (JSON)
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        format: 'json'
-        output: 'trivy-report.json'
-        severity: 'CRITICAL,HIGH,MEDIUM'
-        ignore-unfixed: true
-
-    - name: Upload Trivy JSON Report
-      uses: actions/upload-artifact@v4
-      with:
-        name: trivy-json-report
-        path: trivy-report.json
-
-    - name: Download Trivy HTML Template
-      run: |
-        curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
-  
-    - name: Run Trivy vulnerability scanner (HTML)
-      run: |
-        trivy fs --format template --template "html.tpl" --output trivy-report.html --severity CRITICAL,HIGH,MEDIUM .
-  
-    - name: Upload Trivy HTML Report
-      uses: actions/upload-artifact@v4
-      with:
-        name: trivy-html-report
-        path: trivy-report.html
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH

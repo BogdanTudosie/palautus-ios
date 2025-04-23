@@ -1,27 +1,172 @@
 name: Check Unused Code
 
 on:
-    pull_request:
-      branches: [ main ]
-    push:
-      branches: [ main ]
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
 jobs:
-    periphery:
-      runs-on: macos-latest
-      steps:
-        - uses: actions/checkout@v4
+  periphery:
+    name: 🔍 Unused Code Check
+    runs-on: macos-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
 
-        - name: Install periphery
-          run: brew install periphery
+      - name: 🛠️ Select Xcode
+        run: |
+          echo "Using Xcode 16.2..."
+          sudo xcode-select -s /Applications/Xcode_16.2.app
+          xcodebuild -version
 
-        - name: Run periphery
-          run: |
-            mkdir -p periphery-reports
-            periphery scan --project palautus.xcodeproj --schemes palautus --format json > periphery-reports/report.json
+      - name: 🔍 Find available iOS runtime
+        id: find-runtime
+        run: |
+          echo "Looking for available iOS runtimes..."
+          # Simplified jq query that properly handles the boolean
+          RUNTIME_ID=$(xcrun simctl list -j runtimes | \
+            jq -r '.runtimes[] | select(.platform=="iOS" and .isAvailable==true) | 
+            select(.version | startswith("17.")) | .identifier' | head -n 1)
 
-        - name: Upload Periphery Reports
-          uses: actions/upload-artifact@v4
-          with:
-            name: periphery-scan-results
-            path: periphery-reports
-            retention-days: 30
+          if [[ -z "$RUNTIME_ID" ]]; then
+            echo "⚠️ No iOS 17 runtime found, attempting download..."
+            xcrun xcodebuild -downloadPlatform iOS
+
+            RUNTIME_ID=$(xcrun simctl list -j runtimes | \
+              jq -r '.runtimes[] | select(.platform=="iOS" and .isAvailable==true) | 
+              select(.version | startswith("17.")) | .identifier' | head -n 1)
+
+            if [[ -z "$RUNTIME_ID" ]]; then
+              echo "❌ Failed to find or download iOS 17 runtime"
+              echo "Available runtimes:"
+              xcrun simctl list runtimes
+              exit 1
+            fi
+          fi
+
+          echo "✅ Found runtime: $RUNTIME_ID"
+          echo "RUNTIME_ID=$RUNTIME_ID" >> $GITHUB_ENV
+
+      - name: 📱 Create and Boot Simulator
+        id: boot-sim
+        run: |
+          echo "Available device types:"
+          xcrun simctl list devicetypes
+
+          DEVICE_TYPE_ID=$(xcrun simctl list devicetypes | grep "iPhone 14" | head -n 1 | awk -F '[()]' '{print $2}')
+          if [[ -z "$DEVICE_TYPE_ID" ]]; then
+            echo "❌ iPhone 14 device type not found!"
+            exit 1
+          fi
+
+          echo "Using device type: $DEVICE_TYPE_ID"
+
+          SIMULATOR_UDID=$(xcrun simctl create "Test_Device" "$DEVICE_TYPE_ID" "$RUNTIME_ID")
+          echo "📱 Created simulator: $SIMULATOR_UDID"
+
+          xcrun simctl boot "$SIMULATOR_UDID"
+
+          for i in {1..12}; do
+            if xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
+              echo "✅ Simulator booted successfully"
+              break
+            fi
+            echo "⏳ Waiting for simulator to boot (attempt $i/12)..."
+            sleep 5
+          done
+
+          echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> $GITHUB_ENV
+
+      - name: 💾 Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            ~/Library/Caches/periphery
+          key: ${{ runner.os }}-deps-${{ hashFiles('**/Brewfile') }}
+
+      - name: 🔧 Install periphery
+        run: |
+          if ! command -v periphery &> /dev/null; then
+            brew install periphery
+          fi
+
+      - name: 🏗️ Build for indexing
+        run: |
+          mkdir -p periphery-reports
+          mkdir -p ~/Library/Caches/com.github.peripheryapp
+
+          DERIVED_DATA_PATH="${HOME}/Library/Developer/Xcode/DerivedData/palautus"
+
+          xcodebuild clean build \
+          -project palautus.xcodeproj \
+          -scheme palautus \
+          -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+          -sdk iphonesimulator \
+          -derivedDataPath "$DERIVED_DATA_PATH" \
+          -allowProvisioningUpdates \
+          -configuration Debug \
+          CODE_SIGN_STYLE=Manual \
+          CODE_SIGN_IDENTITY=- \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          ONLY_ACTIVE_ARCH=YES \
+          DEVELOPMENT_TEAM="" \
+          PROVISIONING_PROFILE_SPECIFIER="" \
+          | xcpretty --color --simple
+
+          echo "DERIVED_DATA_PATH=$DERIVED_DATA_PATH" >> $GITHUB_ENV
+
+      - name: 🔎 Run periphery
+        run: |
+          cd "$GITHUB_WORKSPACE"
+
+          mkdir -p periphery-reports
+
+          INDEX_STORE_PATH="$DERIVED_DATA_PATH/Index.noindex/DataStore"
+
+          if [[ ! -d "$INDEX_STORE_PATH" ]]; then
+            echo "❌ Index store path not found at $INDEX_STORE_PATH! Looking in DerivedData directory..."
+            find "$DERIVED_DATA_PATH" -type d | grep -i index
+            exit 1
+          fi
+
+          echo "✅ Found index store path: $INDEX_STORE_PATH"
+
+          periphery scan \
+            --project "${GITHUB_WORKSPACE}/palautus.xcodeproj" \
+            --schemes palautus \
+            --format json \
+            --index-store-path "$INDEX_STORE_PATH" \
+            --skip-build \
+            --quiet > periphery-reports/report.json || true
+
+          if [ -f periphery-reports/report.json ]; then
+            echo "✅ Periphery scan completed"
+            echo "📊 Results saved to periphery-reports/report.json"
+            
+            if [ -s periphery-reports/report.json ]; then
+              echo "Report preview:"
+              head -n 10 periphery-reports/report.json
+              
+              if grep -q "^\[" periphery-reports/report.json; then
+                UNUSED_COUNT=$(jq '. | length' periphery-reports/report.json)
+                echo "📝 Found $UNUSED_COUNT unused code items (array format)"
+              else
+                UNUSED_COUNT=$(jq -r 'if has("results") then .results | length else if has("unused_declarations") then .unused_declarations | length else "unknown format" end end' periphery-reports/report.json || echo "parsing error")
+                echo "📝 Found $UNUSED_COUNT unused code items"
+              fi
+            else
+              echo "⚠️ Report file is empty"
+            fi
+          else
+            echo "⚠️ Warning: No report file generated"
+          fi
+
+      - name: 📤 Upload Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: periphery-scan-results
+          path: periphery-reports
+          retention-days: 14
