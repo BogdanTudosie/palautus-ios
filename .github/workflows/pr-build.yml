@@ -10,50 +10,74 @@ on:
 
 jobs:
   build-and-test:
-    name: Build and Test
+    name: 📱 Build and Test
     runs-on: macos-latest
     permissions:
       contents: read
       security-events: write
 
+    outputs:
+      test-status: ${{ steps.tests.outputs.status }}
+      coverage: ${{ steps.coverage.outputs.percentage }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+      - name: 🛠️ Select Xcode Version
+        run: |
+          echo "Using Xcode 16.2..."
+          sudo xcode-select -s /Applications/Xcode_16.2.app
+          xcodebuild -version
 
-      - name: Setup Simulator
+      - name: 📱 Setup iOS Simulator
         id: simulator
         run: |
+          echo "Setting up iOS Simulator..."
           # Download iOS platform with retry
           for i in {1..5}; do
             xcrun xcodebuild -downloadPlatform iOS && break
-            echo "Attempt $i failed. Retrying..."
+            echo "⚠️ Attempt $i failed. Retrying..."
             sleep 10
           done
 
           # Find and setup simulator
           SIMULATOR_UDID=$(xcrun simctl list devices | awk '/iOS 18\./{flag=1;next}/^--/{flag=0}flag' | grep 'iPhone 16' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_OUTPUT
-          
+          echo "📱 Using simulator: ${SIMULATOR_UDID}"
+
+          echo "🧹 Cleaning simulator state..."
           xcrun simctl erase "$SIMULATOR_UDID"
+
+          echo "🚀 Booting simulator..."
           xcrun simctl boot "$SIMULATOR_UDID"
-          
-          # Wait for boot
+
+          # Wait for boot with status updates
           for i in {1..12}; do
-            xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted" && break
+            if xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
+              echo "✅ Simulator booted successfully"
+              break
+            fi
+            echo "⏳ Waiting for simulator to boot (attempt $i/12)..."
             sleep 5
           done
 
-      - name: Cache Build Data
+      - name: 💾 Cache Build Data
         uses: actions/cache@v3
         with:
           path: ~/Library/Developer/Xcode/DerivedData
           key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/project.pbxproj') }}
           restore-keys: ${{ runner.os }}-xcode-
 
-      - name: Build and Test
+      - name: 🏗️ Build and Test
+        id: tests
         run: |
+          echo "🚀 Starting build and test..."
+
+          # Create test output directory
+          mkdir -p test-results
+
+          # Run build and tests
           xcodebuild test \
           -project palautus.xcodeproj \
           -scheme palautus \
@@ -64,18 +88,42 @@ jobs:
           -maximum-parallel-testing-workers 3 \
           -derivedDataPath ~/Library/Developer/Xcode/DerivedData \
           -configuration Debug \
+          -resultBundlePath "./test-results/TestResults.xcresult" \
           CODE_SIGNING_REQUIRED=NO \
           ONLY_ACTIVE_ARCH=YES \
-          | xcpretty --color --simple && exit ${PIPESTATUS[0]}
+          | tee xcodebuild.log \
+          | xcpretty --color --simple
 
-      - name: Upload Test Results
+          # Extract test results
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "✅ Tests passed successfully"
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "❌ Tests failed. Check logs for details."
+            exit 1
+          fi
+
+      - name: 📊 Calculate Code Coverage
+        id: coverage
+        if: success()
+        run: |
+          COVERAGE=$(xcrun xccov view test-results/TestResults.xcresult | grep -E '^Total$' | awk '{print $3}')
+          echo "percentage=${COVERAGE}" >> $GITHUB_OUTPUT
+          echo "📊 Code Coverage: ${COVERAGE}%"
+
+      - name: 📦 Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
+          path: |
+            test-results/
+            xcodebuild.log
+          retention-days: 14
 
   lint:
+    name: Lint
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
@@ -85,6 +133,7 @@ jobs:
           args: --strict
 
   security:
+    name: Security Scan
     needs: build-and-test
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
