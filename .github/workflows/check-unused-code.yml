@@ -104,18 +104,22 @@ jobs:
           mkdir -p periphery-reports
           mkdir -p ~/Library/Caches/com.github.peripheryapp
 
-          # Build with explicit DerivedData path
-          xcodebuild clean build 
-          -project palautus.xcodeproj 
-          -scheme palautus 
-          -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" 
-          -sdk iphonesimulator 
-          -derivedDataPath ~/Library/Developer/Xcode/DerivedData 
-          CODE_SIGN_IDENTITY="" \
+          # Build with all code signing disabled
+          xcodebuild clean build \
+          -project palautus.xcodeproj \
+          -scheme palautus \
+          -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+          -sdk iphonesimulator \
+          -derivedDataPath ~/Library/Developer/Xcode/DerivedData \
+          -allowProvisioningUpdates \
+          -configuration Debug \
+          CODE_SIGN_STYLE=Manual \
+          CODE_SIGN_IDENTITY=- \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           ONLY_ACTIVE_ARCH=YES \
           DEVELOPMENT_TEAM="" \
+          PROVISIONING_PROFILE_SPECIFIER="" \
           | xcpretty --color --simple
 
       - name: 🔎 Run periphery
