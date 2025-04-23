@@ -56,8 +56,8 @@ jobs:
           RUNTIME_ID=${{ env.RUNTIME_ID }}
 
           # Create simulator
-          SIMULATOR_UDID=$(xcrun simctl create "$SIMULATOR_NAME" \
-            "com.apple.CoreSimulator.SimDeviceType.${SIMULATOR_NAME}" \
+          SIMULATOR_UDID=$(xcrun simctl create "$SIMULATOR_NAME" 
+            "com.apple.CoreSimulator.SimDeviceType.${SIMULATOR_NAME}" 
             "$RUNTIME_ID")
           echo "📱 Created simulator: $SIMULATOR_UDID"
 
@@ -97,25 +97,25 @@ jobs:
           mkdir -p ~/Library/Caches/com.github.peripheryapp
 
           # Build with explicit DerivedData path
-          xcodebuild clean build \
-          -project palautus.xcodeproj \
-          -scheme palautus \
-          -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-          -sdk iphonesimulator \
-          -derivedDataPath ~/Library/Developer/Xcode/DerivedData \
-          CODE_SIGNING_REQUIRED=NO \
-          ONLY_ACTIVE_ARCH=YES \
+          xcodebuild clean build 
+          -project palautus.xcodeproj 
+          -scheme palautus 
+          -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" 
+          -sdk iphonesimulator 
+          -derivedDataPath ~/Library/Developer/Xcode/DerivedData 
+          CODE_SIGNING_REQUIRED=NO 
+          ONLY_ACTIVE_ARCH=YES 
           | xcpretty --color --simple
 
       - name: 🔎 Run periphery
         run: |
-          periphery scan \
-            --project palautus.xcodeproj \
-            --schemes palautus \
-            --format json \
-            --index-store-path ~/Library/Developer/Xcode/DerivedData/palautus-*/Index/DataStore \
-            --retain-objc-metadata \
-            --skip-build \
+          periphery scan 
+            --project palautus.xcodeproj 
+            --schemes palautus 
+            --format json 
+            --index-store-path ~/Library/Developer/Xcode/DerivedData/palautus-*/Index/DataStore 
+            --retain-objc-metadata 
+            --skip-build 
             --quiet > periphery-reports/report.json || true # Continue even if unused code is found
 
       - name: 📤 Upload Reports
