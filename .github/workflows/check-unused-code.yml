@@ -136,11 +136,11 @@ jobs:
           # Create output directory
           mkdir -p periphery-reports
 
-          # Find the actual index store path
-          INDEX_STORE_PATH=$(find "$DERIVED_DATA_PATH" -type d -name "Index" -path "*/DataStore" | head -n 1)
+          # Find the actual index store path with correct .noindex structure
+          INDEX_STORE_PATH="$DERIVED_DATA_PATH/Index.noindex/DataStore"
           
-          if [[ -z "$INDEX_STORE_PATH" ]]; then
-            echo "❌ Index store path not found! Looking in DerivedData directory..."
+          if [[ ! -d "$INDEX_STORE_PATH" ]]; then
+            echo "❌ Index store path not found at $INDEX_STORE_PATH! Looking in DerivedData directory..."
             find "$DERIVED_DATA_PATH" -type d | grep -i index
             exit 1
           fi
