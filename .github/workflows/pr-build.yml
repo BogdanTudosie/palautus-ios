@@ -44,15 +44,12 @@ jobs:
           # Find and setup simulator
           SIMULATOR_UDID=$(xcrun simctl list devices | awk '/iOS 18\./{flag=1;next}/^--/{flag=0}flag' | grep 'iPhone 16' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_OUTPUT
-          echo "📱 Using simulator: ${SIMULATOR_UDID}"
-
-          echo "🧹 Cleaning simulator state..."
           xcrun simctl erase "$SIMULATOR_UDID"
 
           echo "🚀 Booting simulator..."
           xcrun simctl boot "$SIMULATOR_UDID"
 
-          # Wait for boot with status updates
+          # Wait for boot
           for i in {1..12}; do
             if xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
               echo "✅ Simulator booted successfully"
@@ -123,7 +120,7 @@ jobs:
           retention-days: 14
 
   lint:
-    name: Lint
+    name:  Lint
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
