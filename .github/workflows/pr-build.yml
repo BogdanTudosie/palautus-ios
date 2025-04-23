@@ -34,16 +34,68 @@ jobs:
         id: simulator
         run: |
           echo "Setting up iOS Simulator..."
-          # Download iOS platform with retry
-          for i in {1..5}; do
-            xcrun xcodebuild -downloadPlatform iOS && break
-            echo "⚠️ Attempt $i failed. Retrying..."
-            sleep 10
-          done
-
-          # Find and setup simulator
-          SIMULATOR_UDID=$(xcrun simctl list devices | awk '/iOS 18\./{flag=1;next}/^--/{flag=0}flag' | grep 'iPhone 16' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
+          
+          # First list available runtimes and devices
+          echo "Available iOS runtimes:"
+          xcrun simctl list runtimes | grep iOS
+          
+          echo "Available simulator types:"
+          xcrun simctl list devicetypes | grep iPhone
+          
+          # Find an existing iOS simulator (iOS 17 preferred, fall back to iOS 16)
+          echo "Looking for existing simulators..."
+          SIMULATOR_UDID=$(xcrun simctl list devices | grep -E 'iPhone 1[45].*\(iOS 1[67]' | grep -v 'unavailable' | head -n 1 | awk -F '[()]' '{print $2}')
+          
+          # If no suitable simulator found, try to find any available iPhone simulator
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "⚠️ No iPhone 14/15 with iOS 16/17 found, looking for any available iPhone simulator..."
+            SIMULATOR_UDID=$(xcrun simctl list devices | grep -E 'iPhone' | grep -v 'unavailable' | head -n 1 | awk -F '[()]' '{print $2}')
+          fi
+          
+          # If still no simulator found, create one with the latest available runtime
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "⚠️ No suitable simulators found, creating one with available runtime..."
+            
+            # Find the latest available iOS runtime
+            RUNTIME_ID=$(xcrun simctl list runtimes | grep iOS | grep -v unavailable | tail -n 1 | awk '{print $NF}')
+            
+            if [ -z "$RUNTIME_ID" ]; then
+              echo "❌ No iOS runtime available"
+              exit 1
+            fi
+            
+            echo "Found runtime: $RUNTIME_ID"
+            
+            # Find an iPhone device type (preferably iPhone 14)
+            DEVICE_TYPE=$(xcrun simctl list devicetypes | grep "iPhone 14" | head -n 1 | awk -F '[()]' '{print $2}')
+            
+            if [ -z "$DEVICE_TYPE" ]; then
+              DEVICE_TYPE=$(xcrun simctl list devicetypes | grep "iPhone" | head -n 1 | awk -F '[()]' '{print $2}')
+            fi
+            
+            if [ -z "$DEVICE_TYPE" ]; then
+              echo "❌ No iPhone device type available"
+              exit 1
+            fi
+            
+            echo "Using device type: $DEVICE_TYPE"
+            
+            # Create a new simulator
+            SIMULATOR_UDID=$(xcrun simctl create "Test-iPhone" "$DEVICE_TYPE" "$RUNTIME_ID")
+            echo "Created new simulator: $SIMULATOR_UDID"
+          fi
+          
+          # Ensure we have a simulator
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "❌ Failed to find or create a suitable simulator"
+            xcrun simctl list devices
+            exit 1
+          fi
+          
+          echo "Using simulator with ID: $SIMULATOR_UDID"
           echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_OUTPUT
+          
+          # Erase the simulator to start fresh
           xcrun simctl erase "$SIMULATOR_UDID"
 
           echo "🚀 Booting simulator..."
@@ -121,8 +173,7 @@ jobs:
           retention-days: 14
 
   lint:
-    name:  Lint
-    needs: build-and-test
+    name: 🔍 Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -131,8 +182,7 @@ jobs:
           args: --strict
 
   security:
-    name: Security Scan
-    needs: build-and-test
+    name: 🔒 Security Scan
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
