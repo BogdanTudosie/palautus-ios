@@ -1,10 +1,7 @@
 name: iOS Pull Request
 on:
   pull_request:
-    branches:
-      - develop
-      - feature-branch
-      - main
+    branches: [develop, feature-branch, main]
     paths:
       - "**.swift"
       - "**.xcodeproj/**"
@@ -25,188 +22,77 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
-      - name: Download iOS 18.3 Platform
+      - name: Setup Simulator
+        id: simulator
         run: |
-          echo "Downloading iOS platform..."
-          RETRIES=5
-          for i in $(seq 1 $RETRIES); do
-            echo "Attempt $i to download iOS 18.3 platform..."
+          # Download iOS platform with retry
+          for i in {1..5}; do
             xcrun xcodebuild -downloadPlatform iOS && break
-            echo "Download failed. Retrying in 10 seconds..."
+            echo "Attempt $i failed. Retrying..."
             sleep 10
           done
 
-          echo "Waiting for download to complete..."
-          sleep 30
-
-          echo "\nAvailable runtimes after download:"
-          xcrun simctl list runtimes
-
-          # Check if the specific simulator is available
-          SIMULATOR_EXISTS=$(xcrun simctl list devices | grep 'iPhone 16' | grep 'iOS 18' || true)
-          if [ -z "$SIMULATOR_EXISTS" ]; then
-            echo "iPhone 16 simulator for iOS 18.x not found. Downloading it now with retries..."
-            for i in $(seq 1 $RETRIES); do
-              echo "Attempt $i to install the iOS 18.3 simulator..."
-              xcrun simctl runtime install "iOS 18.3" && break
-              echo "Simulator installation failed. Retrying in 10 seconds..."
-              sleep 10
-            done
-          else
-            echo "iPhone 16 simulator for iOS 18.x is already installed."
-          fi
-
-      - name: Debug - List available simulators
-        run: xcrun simctl list devices
-
-      - name: Use Existing iPhone 16 Simulator (iOS 18.x, any variant)
-        run: |
-          # Find existing simulator
-          SIMULATOR_UDID=$(
-            xcrun simctl list devices |
-            awk '/iOS 18\./{flag=1;next}/^--/{flag=0}flag' |
-            grep 'iPhone 16' |
-            grep -v 'unavailable' |
-            awk -F '[()]' '{print $2}' |
-            head -n 1
-          )
-          if [ -z "$SIMULATOR_UDID" ]; then
-            echo "No suitable iPhone 16 simulator found!"
-            exit 1
-          fi
-
-          echo "Using simulator: $SIMULATOR_UDID"
+          # Find and setup simulator
+          SIMULATOR_UDID=$(xcrun simctl list devices | awk '/iOS 18\./{flag=1;next}/^--/{flag=0}flag' | grep 'iPhone 16' | grep -v 'unavailable' | awk -F '[()]' '{print $2}' | head -n 1)
+          echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_OUTPUT
           
-          # Clean up any existing state
-          xcrun simctl shutdown all
           xcrun simctl erase "$SIMULATOR_UDID"
-          
-          # Boot with increased timeout
-          echo "Booting simulator..."
           xcrun simctl boot "$SIMULATOR_UDID"
           
-          # Wait up to 5 minutes for boot
-          for i in {1..30}; do
-            echo "Checking simulator status (attempt $i)..."
-            BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
-            if [ -n "$BOOTED" ]; then
-              echo "Simulator is booted!"
-              xcrun simctl list devices
-              break
-            fi
-            echo "Waiting for simulator to boot (${i}/30)..."
-            sleep 10
+          # Wait for boot
+          for i in {1..12}; do
+            xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted" && break
+            sleep 5
           done
-
-          # Verify simulator is ready
-          if ! xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
-            echo "ERROR: Simulator failed to boot within 5 minutes"
-            xcrun simctl list devices
-            exit 1
-          fi
-
-          echo "SIMULATOR_UDID=${SIMULATOR_UDID}" >> $GITHUB_ENV
 
       - name: Cache Build Data
         uses: actions/cache@v3
         with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData
-            Build/DerivedData
+          path: ~/Library/Developer/Xcode/DerivedData
           key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/project.pbxproj') }}
-          restore-keys: |
-            ${{ runner.os }}-xcode-
+          restore-keys: ${{ runner.os }}-xcode-
 
       - name: Build and Test
         run: |
-          # Ensure simulator is ready
-          BOOTED=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep "Booted" || true)
-          if [ -z "$BOOTED" ]; then
-            echo "Booting simulator..."
-            xcrun simctl boot "${SIMULATOR_UDID}" || true
-            sleep 10
-          fi
-
-          echo "Building and testing..."
-          xcodebuild clean build test \
+          xcodebuild test \
           -project palautus.xcodeproj \
           -scheme palautus \
-          -destination "platform=iOS Simulator,id=${SIMULATOR_UDID}" \
+          -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.SIMULATOR_UDID }}" \
           -sdk iphonesimulator \
-          -configuration Debug \
           -enableCodeCoverage YES \
-          -parallel-testing-enabled NO \
-          -retry-tests-on-failure \
-          -derivedDataPath Build/DerivedData \
-          -allowProvisioningUpdates \
+          -parallel-testing-enabled YES \
+          -maximum-parallel-testing-workers 3 \
+          -derivedDataPath ~/Library/Developer/Xcode/DerivedData \
+          -configuration Debug \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_ALLOWED=NO \
           ONLY_ACTIVE_ARCH=YES \
-          | tee xcodebuild.log \
-          | xcpretty --color --simple
-
-          BUILD_STATUS=${PIPESTATUS[0]}
-          if [ $BUILD_STATUS -ne 0 ]; then
-            echo "Build/Test failed with status $BUILD_STATUS. Full log:"
-            cat xcodebuild.log
-            exit 1
-          fi
-          echo "Build/Test succeeded!"
+          | xcpretty --color --simple && exit ${PIPESTATUS[0]}
 
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: |
-            build/reports/
-            fastlane/test_output/
+          path: ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
 
   lint:
-    name: SwiftLint
+    needs: build-and-test
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: SwiftLint
-        uses: norio-nomura/action-swiftlint@3.2.1
+      - uses: norio-nomura/action-swiftlint@3.2.1
         with:
           args: --strict
 
   security:
-    name: Security Scan
+    needs: build-and-test
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner (JSON)
-        uses: aquasecurity/trivy-action@master
+      - uses: aquasecurity/trivy-action@master
         with:
-          scan-type: "fs"
-          format: "json"
-          output: "trivy-report.json"
-          severity: "CRITICAL,HIGH,MEDIUM"
-          ignore-unfixed: true
-
-      - name: Upload Trivy JSON Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-json-report
-          path: trivy-report.json
-
-      - name: Download Trivy HTML Template
-        run: |
-          curl -o html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
-
-      - name: Run Trivy vulnerability scanner (HTML)
-        run: |
-          trivy fs --format template --template "html.tpl" --output trivy-report.html --severity CRITICAL,HIGH,MEDIUM .
-
-      - name: Upload Trivy HTML Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-html-report
-          path: trivy-report.html
+          scan-type: fs
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
