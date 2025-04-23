@@ -24,20 +24,26 @@ jobs:
         id: simulator
         run: |
           echo "Setting up iOS Simulator..."
-          # Download iOS platform with retry
-          for i in {1..3}; do
-            xcrun xcodebuild -downloadPlatform iOS && break
-            echo "⚠️ Attempt $i failed. Retrying..."
-            sleep 5
-          done
 
-          # List available runtimes for debugging
-          echo "Available runtimes:"
-          xcrun simctl list runtimes
+          # Find available iOS 17.x simulator
+          RUNTIME_ID=$(xcrun simctl list runtimes | grep "iOS 17" | head -n 1 | awk '{print $NF}')
+          if [ -z "$RUNTIME_ID" ]; then
+            echo "⚠️ iOS 17 runtime not found, downloading..."
+            xcrun xcodebuild -downloadPlatform iOS
+            RUNTIME_ID=$(xcrun simctl list runtimes | grep "iOS 17" | head -n 1 | awk '{print $NF}')
+          fi
 
-          # Create and boot simulator with iOS 17.4
-          DEVICE_ID=$(xcrun simctl create "iPhone 14" com.apple.CoreSimulator.SimDeviceType.iPhone-14 com.apple.CoreSimulator.SimRuntime.iOS-17-4)
+          echo "📱 Using runtime: $RUNTIME_ID"
+
+          # Create and boot simulator
+          DEVICE_ID=$(xcrun simctl create "iPhone 16" \
+            com.apple.CoreSimulator.SimDeviceType.iPhone-16 \
+            $RUNTIME_ID)
+
+          echo "🚀 Booting simulator: $DEVICE_ID"
           xcrun simctl boot "$DEVICE_ID"
+
+          # Export for other steps
           echo "DEVICE_ID=$DEVICE_ID" >> $GITHUB_ENV
 
       - name: 💾 Cache Dependencies
