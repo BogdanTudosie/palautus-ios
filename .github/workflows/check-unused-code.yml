@@ -104,13 +104,16 @@ jobs:
           mkdir -p periphery-reports
           mkdir -p ~/Library/Caches/com.github.peripheryapp
 
+          # Set derived data path explicitly to find it later
+          DERIVED_DATA_PATH="${HOME}/Library/Developer/Xcode/DerivedData/palautus"
+
           # Build with all code signing disabled
           xcodebuild clean build \
           -project palautus.xcodeproj \
           -scheme palautus \
           -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
           -sdk iphonesimulator \
-          -derivedDataPath ~/Library/Developer/Xcode/DerivedData \
+          -derivedDataPath "$DERIVED_DATA_PATH" \
           -allowProvisioningUpdates \
           -configuration Debug \
           CODE_SIGN_STYLE=Manual \
@@ -122,6 +125,9 @@ jobs:
           PROVISIONING_PROFILE_SPECIFIER="" \
           | xcpretty --color --simple
 
+          # Export the derived data path for the next step
+          echo "DERIVED_DATA_PATH=$DERIVED_DATA_PATH" >> $GITHUB_ENV
+
       - name: 🔎 Run periphery
         run: |
           # Ensure we're in the correct directory
@@ -130,12 +136,23 @@ jobs:
           # Create output directory
           mkdir -p periphery-reports
 
+          # Find the actual index store path
+          INDEX_STORE_PATH=$(find "$DERIVED_DATA_PATH" -type d -name "Index" -path "*/DataStore" | head -n 1)
+          
+          if [[ -z "$INDEX_STORE_PATH" ]]; then
+            echo "❌ Index store path not found! Looking in DerivedData directory..."
+            find "$DERIVED_DATA_PATH" -type d | grep -i index
+            exit 1
+          fi
+          
+          echo "✅ Found index store path: $INDEX_STORE_PATH"
+
           # Run periphery with correct options
           periphery scan \
             --project "${GITHUB_WORKSPACE}/palautus.xcodeproj" \
             --schemes palautus \
             --format json \
-            --index-store-path "${HOME}/Library/Developer/Xcode/DerivedData/palautus-*/Index/DataStore" \
+            --index-store-path "$INDEX_STORE_PATH" \
             --skip-build \
             --quiet > periphery-reports/report.json || true
 
@@ -145,10 +162,11 @@ jobs:
             echo "📊 Results saved to periphery-reports/report.json"
             
             # Display summary of findings
-            echo "📝 Unused code summary:"
-            jq -r '.results | length' periphery-reports/report.json
+            UNUSED_COUNT=$(jq -r '.results | length' periphery-reports/report.json)
+            echo "📝 Found $UNUSED_COUNT unused code items"
           else
             echo "⚠️ Warning: No report file generated"
+          fi
 
       - name: 📤 Upload Reports
         uses: actions/upload-artifact@v4
