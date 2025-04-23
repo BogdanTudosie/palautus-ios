@@ -33,7 +33,6 @@ jobs:
             echo "⚠️ No iOS 17 runtime found, attempting download..."
             xcrun xcodebuild -downloadPlatform iOS
 
-            # Check again after download with fixed query
             RUNTIME_ID=$(xcrun simctl list -j runtimes | \
               jq -r '.runtimes[] | select(.platform=="iOS" and .isAvailable==true) | 
               select(.version | startswith("17.")) | .identifier' | head -n 1)
@@ -52,11 +51,9 @@ jobs:
       - name: 📱 Create and Boot Simulator
         id: boot-sim
         run: |
-          # List and find correct device type ID
           echo "Available device types:"
           xcrun simctl list devicetypes
 
-          # Get exact device type ID for iPhone 14
           DEVICE_TYPE_ID=$(xcrun simctl list devicetypes | grep "iPhone 14" | head -n 1 | awk -F '[()]' '{print $2}')
           if [[ -z "$DEVICE_TYPE_ID" ]]; then
             echo "❌ iPhone 14 device type not found!"
@@ -65,14 +62,11 @@ jobs:
 
           echo "Using device type: $DEVICE_TYPE_ID"
 
-          # Create simulator with proper identifiers
           SIMULATOR_UDID=$(xcrun simctl create "Test_Device" "$DEVICE_TYPE_ID" "$RUNTIME_ID")
           echo "📱 Created simulator: $SIMULATOR_UDID"
 
-          # Boot and verify
           xcrun simctl boot "$SIMULATOR_UDID"
 
-          # Wait for boot with timeout
           for i in {1..12}; do
             if xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
               echo "✅ Simulator booted successfully"
@@ -100,14 +94,11 @@ jobs:
 
       - name: 🏗️ Build for indexing
         run: |
-          # Create required directories
           mkdir -p periphery-reports
           mkdir -p ~/Library/Caches/com.github.peripheryapp
 
-          # Set derived data path explicitly to find it later
           DERIVED_DATA_PATH="${HOME}/Library/Developer/Xcode/DerivedData/palautus"
 
-          # Build with all code signing disabled
           xcodebuild clean build \
           -project palautus.xcodeproj \
           -scheme palautus \
@@ -125,29 +116,24 @@ jobs:
           PROVISIONING_PROFILE_SPECIFIER="" \
           | xcpretty --color --simple
 
-          # Export the derived data path for the next step
           echo "DERIVED_DATA_PATH=$DERIVED_DATA_PATH" >> $GITHUB_ENV
 
       - name: 🔎 Run periphery
         run: |
-          # Ensure we're in the correct directory
           cd "$GITHUB_WORKSPACE"
 
-          # Create output directory
           mkdir -p periphery-reports
 
-          # Find the actual index store path with correct .noindex structure
           INDEX_STORE_PATH="$DERIVED_DATA_PATH/Index.noindex/DataStore"
-          
+
           if [[ ! -d "$INDEX_STORE_PATH" ]]; then
             echo "❌ Index store path not found at $INDEX_STORE_PATH! Looking in DerivedData directory..."
             find "$DERIVED_DATA_PATH" -type d | grep -i index
             exit 1
           fi
-          
+
           echo "✅ Found index store path: $INDEX_STORE_PATH"
 
-          # Run periphery with correct options
           periphery scan \
             --project "${GITHUB_WORKSPACE}/palautus.xcodeproj" \
             --schemes palautus \
@@ -156,24 +142,18 @@ jobs:
             --skip-build \
             --quiet > periphery-reports/report.json || true
 
-          # Check if report was generated
           if [ -f periphery-reports/report.json ]; then
             echo "✅ Periphery scan completed"
             echo "📊 Results saved to periphery-reports/report.json"
             
-            # First check if the file has content
             if [ -s periphery-reports/report.json ]; then
-              # Display first few lines to help debug format
               echo "Report preview:"
               head -n 10 periphery-reports/report.json
               
-              # Check the structure of the JSON first (array or object)
               if grep -q "^\[" periphery-reports/report.json; then
-                # It's an array, count the elements
                 UNUSED_COUNT=$(jq '. | length' periphery-reports/report.json)
                 echo "📝 Found $UNUSED_COUNT unused code items (array format)"
               else
-                # Try to handle object with results field or other formats
                 UNUSED_COUNT=$(jq -r 'if has("results") then .results | length else if has("unused_declarations") then .unused_declarations | length else "unknown format" end end' periphery-reports/report.json || echo "parsing error")
                 echo "📝 Found $UNUSED_COUNT unused code items"
               fi
