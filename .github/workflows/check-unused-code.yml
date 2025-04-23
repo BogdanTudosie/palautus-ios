@@ -52,19 +52,27 @@ jobs:
       - name: 📱 Create and Boot Simulator
         id: boot-sim
         run: |
-          SIMULATOR_NAME="iPhone 14"
-          RUNTIME_ID=${{ env.RUNTIME_ID }}
+          # List and find correct device type ID
+          echo "Available device types:"
+          xcrun simctl list devicetypes
 
-          # Create simulator
-          SIMULATOR_UDID=$(xcrun simctl create "$SIMULATOR_NAME" 
-            "com.apple.CoreSimulator.SimDeviceType.${SIMULATOR_NAME}" 
-            "$RUNTIME_ID")
+          # Get exact device type ID for iPhone 14
+          DEVICE_TYPE_ID=$(xcrun simctl list devicetypes | grep "iPhone 14" | head -n 1 | awk -F '[()]' '{print $2}')
+          if [[ -z "$DEVICE_TYPE_ID" ]]; then
+            echo "❌ iPhone 14 device type not found!"
+            exit 1
+          fi
+
+          echo "Using device type: $DEVICE_TYPE_ID"
+
+          # Create simulator with proper identifiers
+          SIMULATOR_UDID=$(xcrun simctl create "Test_Device" "$DEVICE_TYPE_ID" "$RUNTIME_ID")
           echo "📱 Created simulator: $SIMULATOR_UDID"
 
-          # Boot simulator
+          # Boot and verify
           xcrun simctl boot "$SIMULATOR_UDID"
 
-          # Wait for boot
+          # Wait for boot with timeout
           for i in {1..12}; do
             if xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -q "Booted"; then
               echo "✅ Simulator booted successfully"
