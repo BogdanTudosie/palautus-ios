@@ -124,14 +124,28 @@ jobs:
 
       - name: 🔎 Run periphery
         run: |
-          periphery scan 
-            --project palautus.xcodeproj 
-            --schemes palautus 
-            --format json 
-            --index-store-path ~/Library/Developer/Xcode/DerivedData/palautus-*/Index/DataStore 
-            --retain-objc-metadata 
-            --skip-build 
-            --quiet > periphery-reports/report.json || true # Continue even if unused code is found
+          # Ensure we're in the correct directory
+          cd "$GITHUB_WORKSPACE"
+
+          # Create output directory
+          mkdir -p periphery-reports
+
+          # Run periphery with absolute paths
+          periphery scan \
+            --project "${GITHUB_WORKSPACE}/palautus.xcodeproj" \
+            --schemes palautus \
+            --format json \
+            --index-store-path "${HOME}/Library/Developer/Xcode/DerivedData/palautus-*/Index/DataStore" \
+            --retain-objc-metadata \
+            --skip-build \
+            --quiet > periphery-reports/report.json || true
+            
+          # Check if report was generated
+          if [ -f periphery-reports/report.json ]; then
+            echo "✅ Periphery scan completed"
+            echo "📊 Results saved to periphery-reports/report.json"
+          else
+            echo "⚠️ Warning: No report file generated"
 
       - name: 📤 Upload Reports
         uses: actions/upload-artifact@v4
