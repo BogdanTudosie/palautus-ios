@@ -111,8 +111,11 @@ jobs:
           -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" 
           -sdk iphonesimulator 
           -derivedDataPath ~/Library/Developer/Xcode/DerivedData 
-          CODE_SIGNING_REQUIRED=NO 
-          ONLY_ACTIVE_ARCH=YES 
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          ONLY_ACTIVE_ARCH=YES \
+          DEVELOPMENT_TEAM="" \
           | xcpretty --color --simple
 
       - name: 🔎 Run periphery
