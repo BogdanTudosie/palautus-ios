@@ -30,11 +30,11 @@ jobs:
           if [[ -z "$RUNTIME_ID" ]]; then
             echo "⚠️ No iOS 17 runtime found, attempting download..."
             xcrun xcodebuild -downloadPlatform iOS
-            
+
             # Check again after download
             RUNTIME_ID=$(xcrun simctl list -j runtimes | \
               jq -r '.runtimes[] | select(.platform == "iOS" and .isAvailable == true and .version | test("^17")) | .identifier' | head -n 1)
-            
+
             if [[ -z "$RUNTIME_ID" ]]; then
               echo "❌ Failed to find or download iOS 17 runtime"
               exit 1
